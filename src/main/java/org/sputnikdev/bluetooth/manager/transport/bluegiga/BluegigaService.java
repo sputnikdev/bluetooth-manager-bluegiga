@@ -25,10 +25,7 @@ import org.sputnikdev.bluetooth.URL;
 import org.sputnikdev.bluetooth.manager.transport.Characteristic;
 import org.sputnikdev.bluetooth.manager.transport.Service;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 
 /**
@@ -38,15 +35,19 @@ import java.util.Map;
 class BluegigaService implements Service {
 
     private final URL url;
+    private final int handleStart;
+    private final int handleEnd;
     private final Map<URL, BluegigaCharacteristic> characteristics = new HashMap<>();
 
-    BluegigaService(URL url) {
+    BluegigaService(URL url, int handleStart, int handleEnd) {
         this.url = url;
+        this.handleStart = handleStart;
+        this.handleEnd = handleEnd;
     }
 
     @Override
     public List<Characteristic> getCharacteristics() {
-        return Collections.emptyList();
+        return new ArrayList<>(characteristics.values());
     }
 
     @Override
@@ -61,15 +62,50 @@ class BluegigaService implements Service {
         }
     }
 
+    BluegigaCharacteristic getCharacteristic(URL url) {
+        synchronized (characteristics) {
+            return characteristics.get(url.getCharacteristicURL());
+        }
+    }
+
+    BluegigaCharacteristic findCharacteristicByShortUUID(String shortUUID) {
+        synchronized (characteristics) {
+            return characteristics.values().stream()
+                    .filter(characteristic -> match(characteristic, shortUUID))
+                    .findFirst().orElse(null);
+        }
+    }
+
+    int getHandleStart() {
+        return handleStart;
+    }
+
+    int getHandleEnd() {
+        return handleEnd;
+    }
+
     void handleEvent(BlueGigaFindInformationFoundEvent infoEvent) {
         // A Characteristic has been discovered
 
-        URL characteristicURL = url.copyWithCharacteristic(infoEvent.getUuid().toString());
-        BluegigaCharacteristic characteristic = new BluegigaCharacteristic(characteristicURL, infoEvent.getChrHandle());
-
-        synchronized (characteristics) {
-            characteristics.put(characteristicURL, characteristic);
+        long uuid = infoEvent.getUuid().getMostSignificantBits() >> 32;
+        if (uuid >= 0x2800 && uuid <= 0x280F) {
+            // Declarations (https://www.bluetooth.com/specifications/gatt/declarations)
+            //TODO handle declarations (maybe just skip them)
+        } else if (uuid >= 0x2900 && uuid <= 0x290F) {
+            // Descriptors
+            //TODO handle descriptors
+        } else {
+            // characteristics
+            URL characteristicURL = url.copyWithCharacteristic(infoEvent.getUuid().toString());
+            BluegigaCharacteristic characteristic = new BluegigaCharacteristic(characteristicURL,
+                    infoEvent.getChrHandle());
+            synchronized (characteristics) {
+                characteristics.put(characteristicURL, characteristic);
+            }
         }
+    }
 
+    private boolean match(BluegigaCharacteristic characteristic, String shortUUID) {
+        return characteristic.getURL().getCharacteristicUUID().substring(0, 8).contains(shortUUID.toLowerCase());
     }
 }

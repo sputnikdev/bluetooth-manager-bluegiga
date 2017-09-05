@@ -21,8 +21,12 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
  */
 
 import org.sputnikdev.bluetooth.URL;
-import org.sputnikdev.bluetooth.manager.transport.Notification;
 import org.sputnikdev.bluetooth.manager.transport.Characteristic;
+import org.sputnikdev.bluetooth.manager.transport.CharacteristicAccessType;
+import org.sputnikdev.bluetooth.manager.transport.Notification;
+
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  *
@@ -33,6 +37,7 @@ class BluegigaCharacteristic implements Characteristic {
 
     private final URL url;
     private final int handle;
+    private Set<CharacteristicAccessType> flags = new HashSet<>();
 
     BluegigaCharacteristic(URL url, int handle) {
         this.url = url;
@@ -40,8 +45,12 @@ class BluegigaCharacteristic implements Characteristic {
     }
 
     @Override
-    public String[] getFlags() {
-        return new String[0];
+    public Set<CharacteristicAccessType> getFlags() {
+        return flags;
+    }
+
+    void setFlags(Set<CharacteristicAccessType> flags) {
+        this.flags = flags;
     }
 
     @Override

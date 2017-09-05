@@ -68,7 +68,7 @@ public class BluegigaFactory implements BluetoothObjectFactory {
     }
 
     @Override
-    public Adapter getAdapter(URL url) {
+    public BluegigaAdapter getAdapter(URL url) {
         synchronized (adapters) {
             if (adapters.containsKey(url.getAdapterURL())) {
                 BluegigaAdapter bluegigaAdapter = adapters.get(url.getAdapterURL());
@@ -84,20 +84,15 @@ public class BluegigaFactory implements BluetoothObjectFactory {
     }
 
     @Override
-    public Device getDevice(URL url) {
-        synchronized (adapters) {
-            URL adapterURL = url.getAdapterURL();
-            if (adapters.containsKey(adapterURL)) {
-                BluegigaAdapter bluegigaAdapter = adapters.get(adapterURL);
-                return bluegigaAdapter.getDevice(url);
-            }
-        }
-        return null;
+    public BluegigaDevice getDevice(URL url) {
+        return Optional.ofNullable(getAdapter(url)).map(adapter -> adapter.getDevice(url)).orElse(null);
     }
 
     @Override
     public Characteristic getCharacteristic(URL url) {
-        return null;
+        return Optional.ofNullable(getDevice(url))
+                .map(device -> device.getService(url))
+                .map(service -> service.getCharacteristic(url)).orElse(null);
     }
 
     @Override
@@ -110,7 +105,7 @@ public class BluegigaFactory implements BluetoothObjectFactory {
     @Override
     public List<DiscoveredDevice> getDiscoveredDevices() {
         synchronized (adapters) {
-            return adapters.values().stream().flatMap(a -> a.getDevices().stream())
+            return adapters.values().stream().flatMap(adapter -> adapter.getDevices().stream())
                     .map(BluegigaFactory::convert).collect(Collectors.toList());
         }
     }

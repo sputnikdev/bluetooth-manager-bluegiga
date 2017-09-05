@@ -31,11 +31,13 @@ import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaScanResponseEven
 import com.zsmartsystems.bluetooth.bluegiga.eir.EirDataType;
 import com.zsmartsystems.bluetooth.bluegiga.eir.EirFlags;
 import com.zsmartsystems.bluetooth.bluegiga.eir.EirPacket;
+import com.zsmartsystems.bluetooth.bluegiga.enumeration.AttributeValueType;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BgApiResponse;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BluetoothAddressType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.sputnikdev.bluetooth.URL;
+import org.sputnikdev.bluetooth.manager.transport.CharacteristicAccessType;
 import org.sputnikdev.bluetooth.manager.transport.Device;
 import org.sputnikdev.bluetooth.manager.transport.Notification;
 import org.sputnikdev.bluetooth.manager.transport.Service;
@@ -65,8 +67,6 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     private short rssi;
     private int bluetoothClass;
     private boolean bleEnabled;
-    private boolean servicesResolved;
-    private boolean characteristicsResolved;
     private final Map<URL, BluegigaService> services = new HashMap<>();
 
     // Notifications/listeners
@@ -83,6 +83,9 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     private final AtomicReference<BlueGigaConnectionStatusEvent> connectionStatusEventHolder = new AtomicReference<>();
     private final AtomicReference<BlueGigaDisconnectedEvent> disconnectedEventHolder = new AtomicReference<>();
 
+    // procedures
+    private final ServiceResolvingProcedure serviceResolvingProcedure = new ServiceResolvingProcedure();
+
     BluegigaDevice(BlueGigaSerialHandler bgHandler, URL url) {
         this.bgHandler = bgHandler;
         this.url = url;
@@ -96,16 +99,20 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public boolean connect() {
-        return syncCall(connectionStatusEventHolder, this::bgConnect, (event) -> {
+        return !isConnected() && syncCall(connectionStatusEventHolder, this::bgConnect, (event) -> {
             this.connectionHandle = event.getConnection();
             this.addressType = event.getAddressType();
+            notifyConnected(true);
+            if (serviceResolvingProcedure.state == ServiceResolvingProcedureState.UNRESOLVED) {
+                serviceResolvingProcedure.start();
+            }
             return true;
         });
     }
 
     @Override
     public boolean disconnect() {
-        return syncCall(disconnectedEventHolder, this::bgDisconnect, (event) -> {
+        return isConnected() && syncCall(disconnectedEventHolder, this::bgDisconnect, (event) -> {
             connectionHandle = -1;
             return true;
         });
@@ -152,9 +159,9 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public short getRSSI() {
-        if (isConnected()) {
-            rssi = bgGetRssi();
-        }
+//        if (isConnected()) {
+//            rssi = bgGetRssi();
+//        }
         return rssi;
     }
 
@@ -185,7 +192,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public boolean isServicesResolved() {
-        return servicesResolved && characteristicsResolved;
+        return serviceResolvingProcedure.state == ServiceResolvingProcedureState.RESOLVED;
     }
 
     @Override
@@ -234,6 +241,8 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
             handleEvent((BlueGigaProcedureCompletedEvent) event);
         } else if (event instanceof BlueGigaFindInformationFoundEvent) {
             handleEvent((BlueGigaFindInformationFoundEvent) event);
+        } else if (event instanceof BlueGigaAttributeValueEvent) {
+            handleEvent((BlueGigaAttributeValueEvent) event);
         }
     }
 
@@ -246,9 +255,6 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     private <T> boolean syncCall(final AtomicReference<T> notifier, Supplier<BgApiResponse> initialCommand,
                                  Function<T, Boolean> eventHandler) {
-        if (!isConnected()) {
-            return false;
-        }
         synchronized (notifier) {
             BgApiResponse response = initialCommand.get();
             if (response == BgApiResponse.SUCCESS) {
@@ -297,13 +303,9 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     private void handleEvent(BlueGigaConnectionStatusEvent connectionEvent) {
         if (url.getDeviceAddress().equals(connectionEvent.getAddress())) {
             synchronized (connectionStatusEventHolder) {
-                this.connectionHandle = connectionEvent.getConnection();
-                this.addressType = connectionEvent.getAddressType();
                 connectionStatusEventHolder.set(connectionEvent);
                 connectionStatusEventHolder.notifyAll();
             }
-            notifyConnected(true);
-            bgFindPrimaryServices();
         }
     }
 
@@ -322,50 +324,36 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     private void handleEvent(BlueGigaGroupFoundEvent serviceEvent) {
         // A service has been discovered
-        if (connectionHandle != serviceEvent.getConnection()) {
-            return;
-        }
-
-        synchronized (services) {
-            URL serviceURL = url.copyWith(serviceEvent.getUuid().toString(), null);
-            services.put(serviceURL, new BluegigaService(serviceURL));
-        }
-    }
-
-    private void handleEvent(BlueGigaProcedureCompletedEvent completedEvent) {
-        if (connectionHandle != completedEvent.getConnection()) {
-            return;
-        }
-
-        if (!this.servicesResolved) {
-            this.servicesResolved = true;
-            bgFindCharacteristics();
-        } else {
-            this.characteristicsResolved = true;
-            notifyServicesResolved(true);
-        }
+        serviceResolvingProcedure.serviceResolved(serviceEvent);
     }
 
     private void handleEvent(BlueGigaFindInformationFoundEvent infoEvent) {
         // A Characteristic has been discovered
+        serviceResolvingProcedure.characteristicResolved(infoEvent);
+    }
 
-        // If this is not our connection handle then ignore.
-        if (connectionHandle != infoEvent.getConnection()) {
-            return;
-        }
+    private void handleEvent(BlueGigaAttributeValueEvent event) {
+        // A characteristic declaration has been found
+        serviceResolvingProcedure.declarationResolved(event);
+    }
 
-        URL serviceURL = url.copyWithService(infoEvent.getUuid().toString());
+    private BluegigaService getServiceByHandle(int handle) {
         synchronized (services) {
-            services.get(serviceURL).handleEvent(infoEvent);
+            return services.values().stream()
+                    .filter(service -> handle >= service.getHandleStart() && handle <= service.getHandleEnd())
+                    .findFirst().get();
         }
     }
 
+    private void handleEvent(BlueGigaProcedureCompletedEvent completedEvent) {
+        serviceResolvingProcedure.procedureCompleted(completedEvent);
+    }
+
     private void servicesUnresolved() {
-        this.servicesResolved = false;
-        this.characteristicsResolved = false;
         synchronized (services) {
             services.clear();
         }
+        this.serviceResolvingProcedure.state = ServiceResolvingProcedureState.UNRESOLVED;
     }
 
     private BgApiResponse bgConnect() {
@@ -439,6 +427,18 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
         return response.getResult() == BgApiResponse.SUCCESS;
     }
 
+    private boolean bgFindDeclarations() {
+        logger.debug("BlueGiga FindDeclarations: connection {}", connectionHandle);
+        BlueGigaReadByTypeCommand command = new BlueGigaReadByTypeCommand();
+        command.setConnection(connectionHandle);
+        command.setStart(1);
+        command.setEnd(65535);
+        command.setUuid(UUID.fromString("00002803-0000-0000-0000-000000000000"));
+        BlueGigaReadByTypeResponse response = (BlueGigaReadByTypeResponse) bgHandler.sendTransaction(command);
+
+        return response.getResult() == BgApiResponse.SUCCESS;
+    }
+
     private void notifyRSSIChanged(short rssi) {
         Notification<Short> notification = rssiNotification;
         if (notification != null) {
@@ -471,4 +471,136 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
             }
         }
     }
+
+    private class ServiceResolvingProcedure {
+
+        private ServiceResolvingProcedureState state = ServiceResolvingProcedureState.UNRESOLVED;
+
+        void start() {
+            bgFindPrimaryServices();
+            state = ServiceResolvingProcedureState.GET_SERVICES;
+        }
+
+        void findCharacteristics() {
+            bgFindCharacteristics();
+            state = ServiceResolvingProcedureState.GET_CHARACTERISTICS;
+        }
+
+        void findDeclarations() {
+            bgFindDeclarations();
+            state = ServiceResolvingProcedureState.GET_DECLARATIONS;
+        }
+
+        void procedureCompleted(BlueGigaProcedureCompletedEvent event) {
+            if (connectionHandle != event.getConnection()) {
+                return;
+            }
+
+            switch (state) {
+                case GET_SERVICES: findCharacteristics(); break;
+                case GET_CHARACTERISTICS: findDeclarations(); break;
+                case GET_DECLARATIONS: finish(); break;
+            }
+        }
+
+        void serviceResolved(BlueGigaGroupFoundEvent event) {
+            if (connectionHandle != event.getConnection()) {
+                return;
+            }
+
+            synchronized (services) {
+                URL serviceURL = url.copyWith(event.getUuid().toString(), null);
+                if (!services.containsKey(serviceURL)) {
+                    services.put(serviceURL,
+                            new BluegigaService(serviceURL, event.getStart(), event.getEnd()));
+                }
+            }
+        }
+
+        void characteristicResolved(BlueGigaFindInformationFoundEvent event) {
+            // If this is not our connection handle then ignore.
+            if (connectionHandle != event.getConnection()) {
+                return;
+            }
+
+            BluegigaService service = getServiceByHandle(event.getChrHandle());
+            if (service != null) {
+                service.handleEvent(event);
+            } else {
+                logger.error("Could not find service: " + event.getUuid());
+            }
+        }
+
+        void declarationResolved(BlueGigaAttributeValueEvent event) {
+            // If this is not our connection handle then ignore.
+            if (connectionHandle != event.getConnection() ||
+                    event.getType() != AttributeValueType.ATTCLIENT_ATTRIBUTE_VALUE_TYPE_READ_BY_TYPE) {
+                return;
+            }
+
+            //  characteristic declaration
+            int[] attributeValue = event.getValue();
+
+            /*
+            It always contains a handle, a UUID, and a set of properties. These three elements describe the subsequent
+            Characteristic Value Declaration. The handle naturally points to the Characteristic Value Declaration’s
+            place in the attribute table. The UUID describes what type of information or value we can expect to find
+            in the Characteristic Value Declaration. For example, a temperature value, the state of a light switch,
+            or some custom arbitrary value. And finally, the properties describe how the characteristic value can be
+            interacted with.
+            Example: 10-0E-00-37-2A
+                0x2A37 is the characteristic UUID
+                000E is the declaration handle
+                10 is the characteristic properties as per this table:
+
+                Broadcast                       0x01
+                Read                            0x02
+                Write without response          0x04
+                Write                           0x08
+                Notify                          0x10
+                Indicate                        0x20
+                Authenticated signed writes     0x40
+                Extended properties             0x80
+
+             Taken from a tutorial: https://devzone.nordicsemi.com/tutorials/17/
+             Official spec:
+             https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.attribute.gatt.characteristic_declaration.xml
+             */
+
+            BluegigaService service = getServiceByHandle(event.getAttHandle());
+            if (service != null) {
+                String characteristicUUID = String.format("%02X", attributeValue[4]) +
+                        String.format("%02X", attributeValue[3]);
+                BluegigaCharacteristic bluegigaCharacteristic =
+                        service.findCharacteristicByShortUUID(characteristicUUID);
+                if (bluegigaCharacteristic != null) {
+                    bluegigaCharacteristic.setFlags(CharacteristicAccessType.parse(attributeValue[0]));
+                } else {
+                    logger.error("Could not find characteristic: " + characteristicUUID);
+                }
+
+            } else {
+                logger.error("Could not find service by handle: " + event.getAttHandle());
+            }
+
+            System.out.println(event.getAttHandle());
+        }
+
+        void finish() {
+            state = ServiceResolvingProcedureState.RESOLVED;
+            notifyServicesResolved(true);
+        }
+
+
+    }
+
+    // An enum to use in the state machine for interacting with the device
+    private enum ServiceResolvingProcedureState {
+        UNRESOLVED,
+        GET_SERVICES,
+        GET_CHARACTERISTICS,
+        GET_DECLARATIONS,
+        RESOLVED
+    }
+
 }
