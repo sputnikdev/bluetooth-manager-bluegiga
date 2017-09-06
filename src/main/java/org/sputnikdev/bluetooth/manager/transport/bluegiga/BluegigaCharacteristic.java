@@ -20,6 +20,8 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
  * #L%
  */
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.sputnikdev.bluetooth.URL;
 import org.sputnikdev.bluetooth.manager.transport.Characteristic;
 import org.sputnikdev.bluetooth.manager.transport.CharacteristicAccessType;
@@ -35,13 +37,18 @@ import java.util.Set;
  */
 class BluegigaCharacteristic implements Characteristic {
 
+    private final Logger logger = LoggerFactory.getLogger(BluegigaCharacteristic.class);
     private final URL url;
-    private final int handle;
+    private final int connectionHandle;
+    private final int characteristicHandle;
+    private final BluegigaHandler bgHandler;
     private Set<CharacteristicAccessType> flags = new HashSet<>();
 
-    BluegigaCharacteristic(URL url, int handle) {
+    BluegigaCharacteristic(BluegigaHandler bgHandler, URL url, int connectionHandle, int characteristicHandle) {
+        this.bgHandler = bgHandler;
         this.url = url;
-        this.handle = handle;
+        this.connectionHandle = connectionHandle;
+        this.characteristicHandle = characteristicHandle;
     }
 
     @Override
@@ -86,5 +93,9 @@ class BluegigaCharacteristic implements Characteristic {
     @Override
     public void dispose() {
 
+    }
+
+    int getCharacteristicHandle() {
+        return characteristicHandle;
     }
 }

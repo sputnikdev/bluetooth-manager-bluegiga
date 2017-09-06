@@ -20,12 +20,14 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
  * #L%
  */
 
-import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaFindInformationFoundEvent;
 import org.sputnikdev.bluetooth.URL;
 import org.sputnikdev.bluetooth.manager.transport.Characteristic;
 import org.sputnikdev.bluetooth.manager.transport.Service;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 
 /**
@@ -62,6 +64,12 @@ class BluegigaService implements Service {
         }
     }
 
+    void addCharacteristic(BluegigaCharacteristic characteristic) {
+        synchronized (characteristics) {
+            characteristics.put(characteristic.getURL(), characteristic);
+        }
+    }
+
     BluegigaCharacteristic getCharacteristic(URL url) {
         synchronized (characteristics) {
             return characteristics.get(url.getCharacteristicURL());
@@ -82,27 +90,6 @@ class BluegigaService implements Service {
 
     int getHandleEnd() {
         return handleEnd;
-    }
-
-    void handleEvent(BlueGigaFindInformationFoundEvent infoEvent) {
-        // A Characteristic has been discovered
-
-        long uuid = infoEvent.getUuid().getMostSignificantBits() >> 32;
-        if (uuid >= 0x2800 && uuid <= 0x280F) {
-            // Declarations (https://www.bluetooth.com/specifications/gatt/declarations)
-            //TODO handle declarations (maybe just skip them)
-        } else if (uuid >= 0x2900 && uuid <= 0x290F) {
-            // Descriptors
-            //TODO handle descriptors
-        } else {
-            // characteristics
-            URL characteristicURL = url.copyWithCharacteristic(infoEvent.getUuid().toString());
-            BluegigaCharacteristic characteristic = new BluegigaCharacteristic(characteristicURL,
-                    infoEvent.getChrHandle());
-            synchronized (characteristics) {
-                characteristics.put(characteristicURL, characteristic);
-            }
-        }
     }
 
     private boolean match(BluegigaCharacteristic characteristic, String shortUUID) {
