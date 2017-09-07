@@ -73,18 +73,30 @@ class BluegigaDevice implements Device {
     @Override
     public boolean connect() {
         if (!isConnected()) {
+
+            logger.info("Trying to connect: {}", url);
             BlueGigaConnectionStatusEvent event = bgHandler.connect(url);
+            logger.info("Connected: {}", url);
+
             this.connectionHandle = event.getConnection();
             this.addressType = event.getAddressType();
             notifyConnected(true);
 
+            logger.info("Discovering services: {}", url);
             // discover services
             bgHandler.getServices(connectionHandle)
                     .stream().map(this::convert).forEach(service -> services.put(service.getURL(), service));
+            logger.info("Services discovered: {}", services.size());
+
+            logger.info("Discovering characteristics: {}", url);
             // discover characteristics
             bgHandler.getCharacteristics(connectionHandle).stream().forEach(this::processCharacteristic);
+            logger.info("Characteristics discovered");
+
+            logger.info("Discovering declarations: {}", url);
             // discover characteristic properties (access flags)
             bgHandler.getDeclarations(connectionHandle).forEach(this::processDeclaration);
+            logger.info("Declarations discovered: {}", url);
 
             serviceResolved();
 
@@ -352,10 +364,10 @@ class BluegigaDevice implements Device {
 
         BluegigaService service = getServiceByHandle(event.getAttHandle());
         if (service != null) {
-            String characteristicUUID = String.format("%02X", attributeValue[4]) +
-                    String.format("%02X", attributeValue[3]);
+            UUID characteristicUUID = BluegigaUtils.deserializeUUID(
+                    Arrays.copyOfRange(attributeValue, 3, attributeValue.length));
             BluegigaCharacteristic bluegigaCharacteristic =
-                    service.findCharacteristicByShortUUID(characteristicUUID);
+                    service.getCharacteristic(service.getURL().copyWithCharacteristic(characteristicUUID.toString()));
             if (bluegigaCharacteristic != null) {
                 bluegigaCharacteristic.setFlags(CharacteristicAccessType.parse(attributeValue[0]));
             } else {
@@ -365,8 +377,6 @@ class BluegigaDevice implements Device {
         } else {
             logger.error("Could not find service by handle: " + event.getAttHandle());
         }
-
-        System.out.println(event.getAttHandle());
     }
 
     private BluegigaService getServiceByHandle(int handle) {

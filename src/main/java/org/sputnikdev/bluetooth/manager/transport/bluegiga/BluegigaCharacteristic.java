@@ -20,6 +20,7 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
  * #L%
  */
 
+import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaAttributeValueEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.sputnikdev.bluetooth.URL;
@@ -72,7 +73,9 @@ class BluegigaCharacteristic implements Characteristic {
 
     @Override
     public byte[] readValue() {
-        return new byte[0];
+        BlueGigaAttributeValueEvent blueGigaAttributeValueEvent =
+                bgHandler.readCharacteristic(connectionHandle, characteristicHandle);
+        return BluegigaUtils.fromInts(blueGigaAttributeValueEvent.getValue());
     }
 
     @Override

@@ -21,7 +21,10 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
  */
 
 
+import com.zsmartsystems.bluetooth.bluegiga.BlueGigaResponse;
 import org.sputnikdev.bluetooth.manager.transport.BluetoothObject;
+
+import java.util.UUID;
 
 /**
  *
@@ -36,5 +39,54 @@ class BluegigaUtils {
             object.dispose();
         } catch (Exception ignore) { }
     }
+
+    static byte[] fromInts(int[] data) {
+        byte[] bytes = new byte[data.length];
+        for (int i = 0; i < data.length; i++) {
+            bytes[i] = (byte) data[i];
+        }
+        return bytes;
+    }
+
+    /**
+     * Deserialises into UUID object from an array of integers.
+     * Copied from {@link BlueGigaResponse#deserializeUuid()}
+     * @param buffer some data represents UUID in blugiga format
+     * @return UUID
+     */
+    static UUID deserializeUUID(int[] buffer) {
+        long low;
+        long high;
+        int position = 0;
+        int length = buffer.length;
+        switch (length) {
+            case 2:
+                low = 0;
+                high = ((long) buffer[position++] << 32) + ((long) buffer[position++] << 40);
+                break;
+            case 4:
+                low = 0;
+                high = ((long) buffer[position++] << 32) + ((long) buffer[position++] << 40)
+                        + ((long) buffer[position++] << 48) + ((long) buffer[position++] << 56);
+                break;
+            case 16:
+                low = (buffer[position++]) + ((long) buffer[position++] << 8) + ((long) buffer[position++] << 16)
+                        + ((long) buffer[position++] << 24) + ((long) buffer[position++] << 32)
+                        + ((long) buffer[position++] << 40) + ((long) buffer[position++] << 48)
+                        + ((long) buffer[position++] << 56);
+                high = (buffer[position++]) + ((long) buffer[position++] << 8) + ((long) buffer[position++] << 16)
+                        + ((long) buffer[position++] << 24) + ((long) buffer[position++] << 32)
+                        + ((long) buffer[position++] << 40) + ((long) buffer[position++] << 48)
+                        + ((long) buffer[position++] << 56);
+                break;
+            default:
+                low = 0;
+                high = 0;
+                position += length;
+                break;
+        }
+        return new UUID(high, low);
+    }
+
 
 }
