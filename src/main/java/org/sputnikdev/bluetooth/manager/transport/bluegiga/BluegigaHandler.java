@@ -24,6 +24,7 @@ import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
@@ -89,98 +90,116 @@ class BluegigaHandler implements BlueGigaEventListener {
     }
 
     BlueGigaConnectionStatusEvent connect(URL url) {
-        return syncCall(BlueGigaConnectionStatusEvent.class, () -> bgConnect(url));
+        return syncCall(BlueGigaConnectionStatusEvent.class, p -> p.getAddress().equals(url.getDeviceAddress()),
+                () -> bgConnect(url));
     }
 
     BlueGigaDisconnectedEvent disconnect(int connectionHandle) {
-        return syncCall(BlueGigaDisconnectedEvent.class, () -> bgDisconnect(connectionHandle));
+        return syncCall(BlueGigaDisconnectedEvent.class, p -> p.getConnection() == connectionHandle,
+                () -> bgDisconnect(connectionHandle));
     }
 
     List<BlueGigaGroupFoundEvent> getServices(int connectionHandle) {
-        return syncCallProcedure(BlueGigaGroupFoundEvent.class, () -> bgFindPrimaryServices(connectionHandle));
+        return syncCallProcedure(BlueGigaGroupFoundEvent.class, a -> a.getConnection() == connectionHandle,
+                BlueGigaProcedureCompletedEvent.class, p -> p.getConnection() == connectionHandle,
+                () -> bgFindPrimaryServices(connectionHandle));
     }
 
 
     List<BlueGigaFindInformationFoundEvent> getCharacteristics(int connectionHandle) {
-        return syncCallProcedure(BlueGigaFindInformationFoundEvent.class,
+        return syncCallProcedure(BlueGigaFindInformationFoundEvent.class, p -> p.getConnection() == connectionHandle,
+                BlueGigaProcedureCompletedEvent.class, p -> p.getConnection() == connectionHandle,
                 () -> bgFindCharacteristics(connectionHandle));
     }
 
     List<BlueGigaAttributeValueEvent> getDeclarations(int connectionHandle) {
-        return syncCallProcedure(BlueGigaAttributeValueEvent.class, () -> bgFindDeclarations(connectionHandle));
+        return syncCallProcedure(BlueGigaAttributeValueEvent.class, p -> p.getConnection() == connectionHandle,
+                BlueGigaProcedureCompletedEvent.class, p -> p.getConnection() == connectionHandle,
+                () -> bgFindDeclarations(connectionHandle));
     }
 
     BlueGigaAttributeValueEvent readCharacteristic(int connectionHandle, int characteristicHandle) {
         return syncCall(BlueGigaAttributeValueEvent.class,
+                (p) -> p.getConnection() == connectionHandle && p.getAttHandle() == characteristicHandle,
                 () -> bgReadCharacteristic(connectionHandle, characteristicHandle));
     }
 
-    <T extends BlueGigaResponse> T syncCall(Class<T> expectedEvent, Supplier<BgApiResponse> initialCommand) {
+    BlueGigaProcedureCompletedEvent writeCharacteristic(int connectionHandle, int characteristicHandle,
+                                                                    int[] data) {
+        return syncCall(BlueGigaProcedureCompletedEvent.class,
+                (p) -> p.getConnection() == connectionHandle && p.getChrHandle() == characteristicHandle,
+                () -> bgWriteCharacteristic(connectionHandle, characteristicHandle, data));
+    }
+
+    boolean writeCharacteristicWithoutResponse(int connectionHandle, int characteristicHandle, int[] data) {
+        return bgWriteCharacteristic(connectionHandle, characteristicHandle, data) == BgApiResponse.SUCCESS;
+    }
+
+    <T extends BlueGigaResponse> T syncCall(Class<T> completedEventType, Predicate<T> completionPredicate,
+                                            Supplier<BgApiResponse> initialCommand) {
         synchronized (eventsCaptor) {
-            eventsCaptor.setExpected(expectedEvent);
+            eventsCaptor.setCompletedEventType(completedEventType);
+            eventsCaptor.setCompletionPredicate(completionPredicate);
             BgApiResponse response = initialCommand.get();
             if (response == BgApiResponse.SUCCESS) {
                 try {
-                    BlueGigaResponse event = eventsCaptor.getEvents().poll(WAIT_EVENT_TIMEOUT, TimeUnit.MILLISECONDS);
+                    BlueGigaResponse event = (BlueGigaResponse)
+                            eventsCaptor.getEvents().poll(WAIT_EVENT_TIMEOUT, TimeUnit.MILLISECONDS);
                     if (event == null) {
                         throw new BluegigaException("Could not receive expected event");
                     }
-
-                    eventsCaptor.reset();
-
-                    if (expectedEvent.isInstance(event)) {
+                    if (eventsCaptor.isCompleted()) {
+                        eventsCaptor.reset();
                         return (T) event;
                     } else {
-                        throw new BluegigaException("Receiving process has been interrupted by: " + event);
+                        throw new IllegalStateException("Bluegiga procedure has not been completed");
                     }
-
                 } catch (InterruptedException e) {
-                    throw new BluegigaException("Event receiving process has been interrupted", e);
+                    throw new BluegigaException("Bluegiga procedure has been interrupted", e);
                 }
             }
-            throw new BluegigaException("Could not initiate process");
+            throw new BluegigaException("Could not initiate Bluegiga process: " + response);
         }
     }
 
-    <T extends BlueGigaResponse> List<T> syncCallProcedure(Class<T> expectedEvent,
-                                                           Supplier<BgApiResponse> initialCommand) {
+    <E extends BlueGigaResponse, C extends BlueGigaResponse> List<E> syncCallProcedure(
+            Class<E> aggregatedEventType, Predicate<E> aggregationPredicate,
+            Class<C> completedEventType, Predicate<C> completionPredicate,
+            Supplier<BgApiResponse> initialCommand) {
         synchronized (eventsCaptor) {
-            eventsCaptor.setExpected(expectedEvent);
+            eventsCaptor.setAggregatedEventType(aggregatedEventType);
+            eventsCaptor.setAggregationPredicate(aggregationPredicate);
+            eventsCaptor.setCompletedEventType(completedEventType);
+            eventsCaptor.setCompletionPredicate(completionPredicate);
             BgApiResponse response = initialCommand.get();
             if (response == BgApiResponse.SUCCESS) {
                 try {
-                    List<T> events = new ArrayList<>();
+                    List<E> events = new ArrayList<>();
                     BlueGigaResponse event;
                     while (true) {
-                        event = eventsCaptor.getEvents().poll(WAIT_EVENT_TIMEOUT, TimeUnit.MILLISECONDS);
+                        event = (BlueGigaResponse) eventsCaptor.getEvents().poll(
+                                WAIT_EVENT_TIMEOUT, TimeUnit.MILLISECONDS);
                         if (event == null) {
                             throw new BluegigaException("Could not receive expected event");
                         }
-                        if (event instanceof BlueGigaProcedureCompletedEvent) {
+                        if (eventsCaptor.isCompleted()) {
                             eventsCaptor.reset();
-                            break;
-                        } else if (expectedEvent.isInstance(event)) {
-                            events.add((T) event);
+                            return events;
                         } else {
-                            eventsCaptor.reset();
-                            throw new BluegigaException("Receiving process has been interrupted by: " + event);
+                            events.add((E) event);
                         }
                     }
-                    return events;
                 } catch (InterruptedException e) {
                     throw new BluegigaException("Event receiving process has been interrupted", e);
                 }
             }
-            throw new BluegigaException("Could not initiate process");
+            throw new BluegigaException("Could not initiate process: " + response);
         }
     }
 
     @Override
     public void bluegigaEventReceived(BlueGigaResponse event) {
-        if (eventsCaptor.getExpected() != null &&
-                (event instanceof BlueGigaProcedureCompletedEvent || eventsCaptor.getExpected().isInstance(event))) {
-            eventsCaptor.getEvents().add(event);
-        }
+        this.eventsCaptor.handleEvent(event);
     }
 
     URL bgGetAdapterAddress() {
@@ -346,7 +365,7 @@ class BluegigaHandler implements BlueGigaEventListener {
      * @param value
      * @return true if successful
      */
-    boolean bgWriteCharacteristic(int connectionHandle, int handle, int[] value) {
+    BgApiResponse bgWriteCharacteristic(int connectionHandle, int handle, int[] value) {
         logger.debug("BlueGiga Write: connection {}, characteristicHandle {}", connectionHandle, handle);
         BlueGigaAttributeWriteCommand command = new BlueGigaAttributeWriteCommand();
         command.setConnection(connectionHandle);
@@ -354,7 +373,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         command.setData(value);
         BlueGigaAttributeWriteResponse response = (BlueGigaAttributeWriteResponse) bgHandler.sendTransaction(command);
 
-        return response.getResult() == BgApiResponse.SUCCESS;
+        return response.getResult();
     }
 
     private void closeAllConnections() {
@@ -467,25 +486,56 @@ class BluegigaHandler implements BlueGigaEventListener {
         this.adapterAddress = null;
     }
 
-    private class EventCaptor {
+    private class EventCaptor<A extends BlueGigaResponse, C extends BlueGigaResponse> {
 
-        private Class<? extends BlueGigaResponse> expected;
+        private Class<A> aggregatedEventType;
+        private Class<C> completedEventType;
+        private Predicate<A> aggregationPredicate;
+        private Predicate<C> completionPredicate;
         private BlockingQueue<BlueGigaResponse> events = new LinkedBlockingDeque<>();
+        private boolean completed;
 
-        Class<? extends BlueGigaResponse> getExpected() {
-            return expected;
+        void setAggregatedEventType(Class<A> aggregatedEventType) {
+            this.aggregatedEventType = aggregatedEventType;
         }
 
-        void setExpected(Class<? extends BlueGigaResponse> expected) {
-            this.expected = expected;
+        void setCompletedEventType(Class<C> completedEventType) {
+            this.completedEventType = completedEventType;
+        }
+
+        void setAggregationPredicate(Predicate<A> aggregationPredicate) {
+            this.aggregationPredicate = aggregationPredicate;
+        }
+
+        void setCompletionPredicate(Predicate<C> completionPredicate) {
+            this.completionPredicate = completionPredicate;
         }
 
         BlockingQueue<BlueGigaResponse> getEvents() {
             return events;
         }
 
+        boolean isCompleted() {
+            return completed;
+        }
+
+        void handleEvent(BlueGigaResponse event) {
+            if (completedEventType != null && completedEventType.isInstance(event) &&
+                    completionPredicate.test((C) event)) {
+                events.add(event);
+                completed = true;
+            } else if (aggregatedEventType != null && aggregatedEventType.isInstance(event) &&
+                    aggregationPredicate.test((A) event)) {
+                events.add(event);
+            }
+        }
+
         void reset() {
-            this.expected = null;
+            this.aggregatedEventType = null;
+            this.completedEventType = null;
+            this.aggregationPredicate = null;
+            this.completionPredicate = null;
+            this.completed = false;
             this.events.clear();
         }
 

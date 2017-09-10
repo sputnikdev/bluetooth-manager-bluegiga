@@ -48,6 +48,14 @@ class BluegigaUtils {
         return bytes;
     }
 
+    static int[] fromBytes(byte[] data) {
+        int[] bytes = new int[data.length];
+        for (int i = 0; i < data.length; i++) {
+            bytes[i] = data[i];
+        }
+        return bytes;
+    }
+
     /**
      * Deserialises into UUID object from an array of integers.
      * Copied from {@link BlueGigaResponse#deserializeUuid()}

@@ -135,8 +135,8 @@ public class BluegigaAdapter implements Adapter, BlueGigaEventListener {
 
     @Override
     public void dispose() {
+        bgHandler.removeEventListener(this);
         synchronized (devices) {
-            devices.values().stream().forEach(BluegigaUtils::dispose);
             devices.clear();
         }
         bgHandler.dispose();
@@ -156,12 +156,10 @@ public class BluegigaAdapter implements Adapter, BlueGigaEventListener {
                     bluegigaDevice = new BluegigaDevice(bgHandler, deviceURL);
                     devices.put(deviceURL, bluegigaDevice);
                     // let the device to set its name and RSSI
+                    bluegigaDevice.handleScanEvent(scanEvent);
                     logger.debug("Discovered: {} ({}) {} ", bluegigaDevice.getURL().getDeviceAddress(),
                             bluegigaDevice.getName(), bluegigaDevice.getRSSI());
-                } else {
-                    bluegigaDevice = devices.get(deviceURL);
                 }
-                bluegigaDevice.handleScanEvent(scanEvent);
             }
         }
     }
