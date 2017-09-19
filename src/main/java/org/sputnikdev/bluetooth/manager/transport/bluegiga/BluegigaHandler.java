@@ -69,6 +69,11 @@ class BluegigaHandler implements BlueGigaEventListener {
         this.init();
     }
 
+    @Override
+    public void bluegigaEventReceived(BlueGigaResponse event) {
+        this.eventsCaptor.handleEvent(event);
+    }
+
     String getPortName() {
         return this.portName;
     }
@@ -135,8 +140,76 @@ class BluegigaHandler implements BlueGigaEventListener {
         return bgWriteCharacteristic(connectionHandle, characteristicHandle, data) == BgApiResponse.SUCCESS;
     }
 
-    <T extends BlueGigaResponse> T syncCall(Class<T> completedEventType, Predicate<T> completionPredicate,
-                                            Supplier<BgApiResponse> initialCommand) {
+    BlueGigaGetInfoResponse bgGetInfo() {
+        return (BlueGigaGetInfoResponse) bgHandler.sendTransaction(new BlueGigaGetInfoCommand());
+    }
+
+    /**
+     * Starts scanning on the dongle
+     *
+     * @param active true for active scanning
+     */
+    boolean bgStartScanning(boolean active) {
+        BlueGigaSetScanParametersCommand scanCommand = new BlueGigaSetScanParametersCommand();
+        scanCommand.setActiveScanning(active);
+        scanCommand.setScanInterval(ACTIVE_SCAN_INTERVAL);
+        scanCommand.setScanWindow(ACTIVE_SCAN_WINDOW);
+        bgHandler.sendTransaction(scanCommand);
+
+        BlueGigaDiscoverCommand discoverCommand = new BlueGigaDiscoverCommand();
+        discoverCommand.setMode(GapDiscoverMode.GAP_DISCOVER_OBSERVATION);
+        BlueGigaDiscoverResponse response = (BlueGigaDiscoverResponse)  bgHandler.sendTransaction(discoverCommand);
+        return response.getResult() == BgApiResponse.SUCCESS;
+    }
+
+    short bgGetRssi(int connectionHandle) {
+        synchronized (eventsCaptor) {
+            BlueGigaGetRssiCommand rssiCommand = new BlueGigaGetRssiCommand();
+            rssiCommand.setConnection(connectionHandle);
+            return (short) ((BlueGigaGetRssiResponse) bgHandler.sendTransaction(rssiCommand)).getRssi();
+        }
+    }
+
+    boolean bgStopProcedure() {
+        BlueGigaCommand command = new BlueGigaEndProcedureCommand();
+        BlueGigaEndProcedureResponse response = (BlueGigaEndProcedureResponse) bgHandler.sendTransaction(command);
+        return response.getResult() == BgApiResponse.SUCCESS;
+    }
+
+    void dispose() {
+        if (bgHandler != null) {
+            bgStopProcedure();
+            closeAllConnections();
+            bgHandler.close();
+            bgHandler = null;
+        }
+
+        try {
+            if (inputStream != null) {
+                inputStream.close();
+                outputStream.close();
+                inputStream = null;
+                outputStream = null;
+            }
+        } catch (IOException e) {
+            logger.error("Could not close input/output stream", e);
+        }
+
+        if (serialPort != null) {
+            // Note: this will fail with a SIGSEGV error on OSX:
+            // Problematic frame: C  [librxtxSerial.jnilib+0x312f]  Java_gnu_io_RXTXPort_interruptEventLoop+0x6b
+            // It is a known issue of the librxtxSerial lib
+            serialPort.close();
+            serialPort = null;
+        }
+
+        this.adapterAddress = null;
+    }
+
+    // Bluegiga API specific methods
+
+    private <T extends BlueGigaResponse> T syncCall(Class<T> completedEventType, Predicate<T> completionPredicate,
+                                                    Supplier<BgApiResponse> initialCommand) {
         synchronized (eventsCaptor) {
             eventsCaptor.setCompletedEventType(completedEventType);
             eventsCaptor.setCompletionPredicate(completionPredicate);
@@ -162,7 +235,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         }
     }
 
-    <E extends BlueGigaResponse, C extends BlueGigaResponse> List<E> syncCallProcedure(
+    private <E extends BlueGigaResponse, C extends BlueGigaResponse> List<E> syncCallProcedure(
             Class<E> aggregatedEventType, Predicate<E> aggregationPredicate,
             Class<C> completedEventType, Predicate<C> completionPredicate,
             Supplier<BgApiResponse> initialCommand) {
@@ -197,12 +270,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         }
     }
 
-    @Override
-    public void bluegigaEventReceived(BlueGigaResponse event) {
-        this.eventsCaptor.handleEvent(event);
-    }
-
-    URL bgGetAdapterAddress() {
+    private URL bgGetAdapterAddress() {
         BlueGigaAddressGetResponse addressResponse = (BlueGigaAddressGetResponse) bgHandler
                 .sendTransaction(new BlueGigaAddressGetCommand());
         if (addressResponse != null) {
@@ -211,29 +279,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         throw new IllegalStateException("Could not get adapter address");
     }
 
-    BlueGigaGetInfoResponse bgGetInfo() {
-        return (BlueGigaGetInfoResponse) bgHandler.sendTransaction(new BlueGigaGetInfoCommand());
-    }
-
-    /**
-     * Starts scanning on the dongle
-     *
-     * @param active true for active scanning
-     */
-    boolean bgStartScanning(boolean active) {
-        BlueGigaSetScanParametersCommand scanCommand = new BlueGigaSetScanParametersCommand();
-        scanCommand.setActiveScanning(active);
-        scanCommand.setScanInterval(ACTIVE_SCAN_INTERVAL);
-        scanCommand.setScanWindow(ACTIVE_SCAN_WINDOW);
-        bgHandler.sendTransaction(scanCommand);
-
-        BlueGigaDiscoverCommand discoverCommand = new BlueGigaDiscoverCommand();
-        discoverCommand.setMode(GapDiscoverMode.GAP_DISCOVER_OBSERVATION);
-        BlueGigaDiscoverResponse response = (BlueGigaDiscoverResponse)  bgHandler.sendTransaction(discoverCommand);
-        return response.getResult() == BgApiResponse.SUCCESS;
-    }
-
-    BgApiResponse bgConnect(URL url) {
+    private BgApiResponse bgConnect(URL url) {
         // Connect...
         //TODO revise these constants, especially the "latency" as it may improve devices energy consumption
         // BG spec: This parameter configures the slave latency. Slave latency defines how many connection intervals
@@ -268,24 +314,6 @@ class BluegigaHandler implements BlueGigaEventListener {
         return ((BlueGigaDisconnectResponse) bgHandler.sendTransaction(command)).getResult();
     }
 
-    short bgGetRssi(int connectionHandle) {
-        synchronized (eventsCaptor) {
-            BlueGigaGetRssiCommand rssiCommand = new BlueGigaGetRssiCommand();
-            rssiCommand.setConnection(connectionHandle);
-            return (short) ((BlueGigaGetRssiResponse) bgHandler.sendTransaction(rssiCommand)).getRssi();
-        }
-    }
-
-    boolean bgStopProcedure() {
-        BlueGigaCommand command = new BlueGigaEndProcedureCommand();
-        BlueGigaEndProcedureResponse response = (BlueGigaEndProcedureResponse) bgHandler.sendTransaction(command);
-
-        if (response.getResult() == BgApiResponse.SUCCESS) {
-            return true;
-        }
-        return false;
-    }
-
     /*
      * The following methods are private methods for handling the BlueGiga protocol
      */
@@ -303,7 +331,7 @@ class BluegigaHandler implements BlueGigaEventListener {
      *
      * @return true if successful
      */
-    BgApiResponse bgFindPrimaryServices(int connectionHandle) {
+    private BgApiResponse bgFindPrimaryServices(int connectionHandle) {
         logger.debug("BlueGiga FindPrimary: connection {}", connectionHandle);
         BlueGigaReadByGroupTypeCommand command = new BlueGigaReadByGroupTypeCommand();
         command.setConnection(connectionHandle);
@@ -319,7 +347,7 @@ class BluegigaHandler implements BlueGigaEventListener {
      *
      * @return true if successful
      */
-    BgApiResponse bgFindCharacteristics(int connectionHandle) {
+    private BgApiResponse bgFindCharacteristics(int connectionHandle) {
         logger.debug("BlueGiga Find: connection {}", connectionHandle);
         BlueGigaFindInformationCommand command = new BlueGigaFindInformationCommand();
         command.setConnection(connectionHandle);
@@ -329,7 +357,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         return response.getResult();
     }
 
-    BgApiResponse bgFindDeclarations(int connectionHandle) {
+    private BgApiResponse bgFindDeclarations(int connectionHandle) {
         logger.debug("BlueGiga FindDeclarations: connection {}", connectionHandle);
         BlueGigaReadByTypeCommand command = new BlueGigaReadByTypeCommand();
         command.setConnection(connectionHandle);
@@ -347,7 +375,7 @@ class BluegigaHandler implements BlueGigaEventListener {
      * @param characteristicHandle
      * @return true if successful
      */
-    BgApiResponse bgReadCharacteristic(int connectionHandle, int characteristicHandle) {
+    private BgApiResponse bgReadCharacteristic(int connectionHandle, int characteristicHandle) {
         logger.debug("BlueGiga Read: connection {}, characteristicHandle {}", connectionHandle, characteristicHandle);
         BlueGigaReadByHandleCommand command = new BlueGigaReadByHandleCommand();
         command.setConnection(connectionHandle);
@@ -365,7 +393,7 @@ class BluegigaHandler implements BlueGigaEventListener {
      * @param value
      * @return true if successful
      */
-    BgApiResponse bgWriteCharacteristic(int connectionHandle, int handle, int[] value) {
+    private BgApiResponse bgWriteCharacteristic(int connectionHandle, int handle, int[] value) {
         logger.debug("BlueGiga Write: connection {}, characteristicHandle {}", connectionHandle, handle);
         BlueGigaAttributeWriteCommand command = new BlueGigaAttributeWriteCommand();
         command.setConnection(connectionHandle);
@@ -454,36 +482,6 @@ class BluegigaHandler implements BlueGigaEventListener {
             logger.error("Error getting serial streams", e);
             throw new BluegigaException(e);
         }
-    }
-
-    void dispose() {
-        if (bgHandler != null) {
-            bgStopProcedure();
-            closeAllConnections();
-            bgHandler.close();
-            bgHandler = null;
-        }
-
-        try {
-            if (inputStream != null) {
-                inputStream.close();
-                outputStream.close();
-                inputStream = null;
-                outputStream = null;
-            }
-        } catch (IOException e) {
-            logger.error("Could not close input/output stream", e);
-        }
-
-        if (serialPort != null) {
-            // Note: this will fail with a SIGSEGV error on OSX:
-            // Problematic frame: C  [librxtxSerial.jnilib+0x312f]  Java_gnu_io_RXTXPort_interruptEventLoop+0x6b
-            // It is a known issue of the librxtxSerial lib
-            serialPort.close();
-            serialPort = null;
-        }
-
-        this.adapterAddress = null;
     }
 
     private class EventCaptor<A extends BlueGigaResponse, C extends BlueGigaResponse> {
