@@ -148,8 +148,6 @@
             <groupId>com.zsmartsystems.bluetooth.bluegiga</groupId>
             <artifactId>com.zsmartsystems.bluetooth.bluegiga</artifactId>
             <version>1.0.0-SNAPSHOT</version>
-            <scope>system</scope>
-            <systemPath>${basedir}/lib/com.zsmartsystems.bluetooth.bluegiga-1.0.0-SNAPSHOT.jar</systemPath>
         </dependency>
         <dependency>
             <groupId>org.rxtx</groupId>
@@ -210,9 +208,6 @@
                 <version>2.7</version>
                 <configuration>
                     <format>xml</format>
-                    <maxmem>256m</maxmem>
-                    <!-- aggregated reports for multi-module projects -->
-                    <aggregate>true</aggregate>
                     <check />
                 </configuration>
             </plugin>
@@ -257,6 +252,4 @@
         </plugins>
     </build>
 
-
 </project>
-
