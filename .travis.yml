@@ -1,4 +1,6 @@
 language: java
+before_install:
+    - .travis/install-dependencies.sh
 script: mvn test -P !build-extras -B
 notifications:
   slack: kolotov:69j2qLZ0paybeuQMcKfyN2gP
