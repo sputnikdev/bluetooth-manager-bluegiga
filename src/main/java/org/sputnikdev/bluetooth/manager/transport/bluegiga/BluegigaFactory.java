@@ -133,8 +133,7 @@ public class BluegigaFactory implements BluetoothObjectFactory {
         return new DiscoveredDevice(bluegigaDevice.getURL(),
                 bluegigaDevice.getName(), bluegigaDevice.getAlias(), bluegigaDevice.getRSSI(),
                 bluegigaDevice.getBluetoothClass(),
-                //TODO implement proper determination of the device type
-                bluegigaDevice.getBluetoothClass() == 0);
+                bluegigaDevice.isBleEnabled());
     }
 
     private BluegigaAdapter getAdapter(String portName) {
