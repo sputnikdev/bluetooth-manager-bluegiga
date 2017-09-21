@@ -21,6 +21,7 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
  */
 
 import gnu.io.CommPortIdentifier;
+import gnu.io.NRSerialPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.sputnikdev.bluetooth.URL;
@@ -31,7 +32,13 @@ import org.sputnikdev.bluetooth.manager.transport.BluetoothObjectFactory;
 import org.sputnikdev.bluetooth.manager.transport.Characteristic;
 import org.sputnikdev.bluetooth.manager.transport.Device;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -53,6 +60,13 @@ public class BluegigaFactory implements BluetoothObjectFactory {
 
     private final Map<URL, BluegigaAdapter> adapters = new HashMap<>();
 
+    /**
+     * Constructs Bluegiga factory based on automatically discovered ports.
+     */
+    public BluegigaFactory() {
+        adapters.putAll(discover().stream().collect(
+            Collectors.toMap(BluegigaAdapter::getURL, Function.identity())));
+    }
 
     /**
      * Constructs Bluegiga factory based on a list of serial port names.
@@ -113,6 +127,12 @@ public class BluegigaFactory implements BluetoothObjectFactory {
     @Override
     public String getProtocolName() {
         return BLUEGIGA_PROTOCOL_NAME;
+    }
+
+    private List<BluegigaAdapter> discover() {
+        return NRSerialPort.getAvailableSerialPorts()
+            .stream()
+            .map(this::getAdapter).filter(Objects::nonNull).collect(Collectors.toList());
     }
 
     private List<BluegigaAdapter> discover(List<String> portNames) {

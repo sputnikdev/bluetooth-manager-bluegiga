@@ -449,12 +449,14 @@ class BluegigaHandler implements BlueGigaEventListener {
     private void openSerialPort(final String serialPortName, int baudRate) {
         logger.info("Connecting to serial port [{}]", serialPortName);
         try {
-            CommPortIdentifier portIdentifier = CommPortIdentifier.getPortIdentifier(serialPortName);
-            CommPort commPort = portIdentifier.open("org.sputnikdev.bluetooth", 2000);
-            serialPort = (gnu.io.SerialPort) commPort;
+            NRSerialPort nrSerialPort = new NRSerialPort(serialPortName, baudRate);
+            if (!nrSerialPort.connect()) {
+                throw new BluegigaException("Could not open serial port: " + serialPortName);
+            }
+            serialPort = nrSerialPort.getSerialPortInstance();
             serialPort.setSerialPortParams(baudRate, SerialPort.DATABITS_8, SerialPort.STOPBITS_1,
-                    gnu.io.SerialPort.PARITY_NONE);
-            serialPort.setFlowControlMode(gnu.io.SerialPort.FLOWCONTROL_RTSCTS_OUT);
+                SerialPort.PARITY_NONE);
+            serialPort.setFlowControlMode(SerialPort.FLOWCONTROL_RTSCTS_OUT);
 
             serialPort.enableReceiveThreshold(1);
             serialPort.enableReceiveTimeout(2000);
@@ -464,11 +466,9 @@ class BluegigaHandler implements BlueGigaEventListener {
             serialPort.notifyOnDataAvailable(true);
 
             logger.info("Serial port [{}] is initialized.", portName);
-        } catch (NoSuchPortException e) {
-            logger.warn("Could not find serial port {}", serialPortName);
-            throw new BluegigaException(e);
-        } catch (PortInUseException e) {
-            logger.warn("Serial port is in use {}", serialPortName);
+
+        } catch (NativeResourceException e) {
+            logger.warn("Native resource exception {}; {}", serialPortName, e.toString());
             throw new BluegigaException(e);
         } catch (UnsupportedCommOperationException e) {
             logger.warn("Generic serial port error {}", serialPortName);
