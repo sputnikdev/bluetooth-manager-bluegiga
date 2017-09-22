@@ -1,12 +1,12 @@
 language: java
 before_install:
     - .travis/install-dependencies.sh
-script: mvn test -P travis,!build-extras -B
+script: mvn test -P !build-extras -B
 notifications:
   slack: kolotov:69j2qLZ0paybeuQMcKfyN2gP
 before_deploy: git checkout master
 after_success:
-  - mvn jacoco:report coveralls:report -P travis
+  - mvn jacoco:report coveralls:report
   - .travis/before-deploy.sh
   - .travis/deploy.sh
 env:
@@ -19,7 +19,7 @@ env:
   - secure: "PVBAocn6PHALIOs4e3OnNR4MrgyLtGU6mNw+bKo6v+4us+yl1FKOF8KLypBbnH2m3YaY7Ha2bx3auyNQnXoRNtQsGgTcr6aRCVtJBVhuO3kdM8qwpk9J2L6U8dUhGN3Iv7NuEip+zDer35j9Dt/QIdV/T0vheD6VyZQvHwnlRGZPQ/eJqL6RSZKuxPkEfu//xyH8So3BgYmQnZ0dt4NsKyOYW7u5TFuNL5xRtKotKsLhMUno8BRQo43LYvTxPix3KJHr9ysA3Pb5/zOs5U2Xw6UgQywrrQxl2B8kXrOfDtjZJ9TkXaC8gHmtXfcfXGRHJAgOONJShptSBmSIGofPkeYyJPz9vhh58A++518f965uqLOYRDXW0zDKZufT8ovCWwQemqCA2lHCijCOHhSMTcwWMUYm1BupUoKjdn42bsniMhz1JqDQI72jyXLPNz5n2+xRvyGl6zyXH4mDEuH/5zumFQCdydkKrQcI+u49XbNoSDawn5Gjb7f2bxdFSIqssUBOwWdMybRIkRMrpfckSRETRNk8+ge/j3eMQcTobW4NHvzQ0fZaE7ylg1qeBvkpYQpV95A3dsDGsPb5zAiVqEN98DOPM3b1Plq0A/xR5z6Z2cu4YeViDMxMYmSZbniCxfjk3iF/dyCU+WxkBwANdOYXJ3lz4ildNeCP+j9eNBQ="
   # GPG_PASSPHRASE
   - secure: "JA2OwQpc9PNvbuWO3juQ5703HN4L3GRu82ZCGj6X9/A93BFf9LmrZPjuYKn9WXdCc9fDsSId2oI2zEHkGL/3oitq7xcX7s0K+simSzCVFIdg+UT321gCxwX+qQkx37eyzQ6uWyo8hHn7Ze5Nsg7wRt4juftoZ0oy0uCizDOA4p9UIIAJNGOA0r0s/c7+nJrLaHKNHI/Ef6Mxajw/PqqWxOGnvcARHenOsiqY2cY8nPHr5dRNksSA6djMZ7+ddQkKuF7TYUKTJEO55sKS6ITZ0QIO0vYOZV4/3/xHqvqIBkRAD0HhfbgEKVZhoCh8Zw7LKImEhXktepaQt2s3/8x9sEr154v6m6Dpofqt/RCs5bRnWshBcG5HDqiOmCzG4UNasUj1CMJteLEQigi6ConJ5wrxOavOPG4v2f/CbwbOiO9Lkf9OBXacTv5fpIMB39ytiUNcCjtnYeLH2q9QWbKirpzUHM76KSrB96OzjsCdYNIdV27oi55fVtoo6V7+ptfcXagjQJfzx330BTHJLWFVrDqNfCNedx93OqOy2Q41a5DSV6g1PZY73LqJi1MDYvmWQUn8kJ8ZQLxdyImj4zqj+choSEkDe8/j5H6RRCkRHBz3iUyTMCfqreQwxoiK9YedRztcitSZ+c6WazKl2mXWlRLigKavGV2xDzJPQhd1jYs="
-install: mvn install -P travis,!build-extras -DskipTests=true -Dmaven.javadoc.skip=true -B -V
+install: mvn install -P !build-extras -DskipTests=true -Dmaven.javadoc.skip=true -B -V
 
 cache:
   directories:
