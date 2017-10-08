@@ -40,25 +40,27 @@ import java.util.*;
  */
 public class BluegigaAdapter implements Adapter, BlueGigaEventListener {
 
-    private static final String BLUEGIGA_NAME = "Bluegiga";
+    public static final String BLUEGIGA_NAME = "Bluegiga";
 
     private final Logger logger = LoggerFactory.getLogger(BluegigaAdapter.class);
 
-    private BlueGigaGetInfoResponse info;
+    private final BlueGigaGetInfoResponse info;
     private boolean discovering;
 
     private final BluegigaHandler bgHandler;
 
     private final Map<URL, BluegigaDevice> devices = new HashMap<>();
 
-    public BluegigaAdapter(String portName) {
-        this.bgHandler = new BluegigaHandler(portName);
-        this.info = bgHandler.bgGetInfo();
-        this.bgHandler.addEventListener(this);
+    private Notification<Boolean> discoverinNotification;
+
+    BluegigaAdapter(BluegigaHandler bluegigaHandler) {
+        bgHandler = bluegigaHandler;
+        info = bgHandler.bgGetInfo();
+        bgHandler.addEventListener(this);
     }
 
     String getPortName() {
-        return this.bgHandler.getPortName();
+        return bgHandler.getPortName();
     }
 
     public boolean isAlive() {
@@ -76,7 +78,7 @@ public class BluegigaAdapter implements Adapter, BlueGigaEventListener {
     }
 
     @Override
-    public void setAlias(String s) { }
+    public void setAlias(String alias) { }
 
     @Override
     public boolean isDiscovering() {
@@ -85,23 +87,32 @@ public class BluegigaAdapter implements Adapter, BlueGigaEventListener {
 
     @Override
     public void enableDiscoveringNotifications(Notification<Boolean> notification) {
-
+        discoverinNotification = notification;
     }
 
     @Override
     public void disableDiscoveringNotifications() {
-
+        discoverinNotification = null;
     }
 
     @Override
     public boolean startDiscovery() {
-        return this.discovering = bgHandler.bgStartScanning(true);
+        boolean discoveryStatus = bgHandler.bgStartScanning(true);
+        if (!discovering && discoveryStatus) {
+            discovering = true;
+            notifyDiscovering(true);
+        }
+        return discoveryStatus;
     }
 
     @Override
     public boolean stopDiscovery() {
-        this.discovering = false;
-        return bgHandler.bgStopProcedure();
+        boolean discoveryStatus = bgHandler.bgStopProcedure();
+        if (discovering && discoveryStatus) {
+            discovering = false;
+            notifyDiscovering(false);
+        }
+        return discoveryStatus;
     }
 
     /*
@@ -174,6 +185,17 @@ public class BluegigaAdapter implements Adapter, BlueGigaEventListener {
                 bluegigaDevice = new BluegigaDevice(bgHandler, deviceURL);
                 devices.put(deviceURL, bluegigaDevice);
                 return bluegigaDevice;
+            }
+        }
+    }
+
+    private void notifyDiscovering(boolean isDiscovering) {
+        Notification<Boolean> notification = discoverinNotification;
+        if (notification != null) {
+            try {
+                notification.notify(isDiscovering);
+            } catch (Exception ex) {
+                logger.error("Could not notify discovering notification", ex);
             }
         }
     }

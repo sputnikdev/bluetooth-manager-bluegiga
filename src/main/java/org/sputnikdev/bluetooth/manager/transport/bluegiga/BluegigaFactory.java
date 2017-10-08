@@ -157,7 +157,7 @@ public class BluegigaFactory implements BluetoothObjectFactory {
     }
 
     private BluegigaAdapter getAdapter(String portName) {
-        BluegigaAdapter bluegigaAdapter = new BluegigaAdapter(portName);
+        BluegigaAdapter bluegigaAdapter = new BluegigaAdapter(new BluegigaHandler(portName));
         if (bluegigaAdapter.isAlive()) {
             return bluegigaAdapter;
         } else {

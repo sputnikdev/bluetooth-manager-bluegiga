@@ -66,7 +66,7 @@ class BluegigaHandler implements BlueGigaEventListener {
 
     BluegigaHandler(String portName) {
         this.portName = portName;
-        this.init();
+        init();
     }
 
     @Override
@@ -129,8 +129,7 @@ class BluegigaHandler implements BlueGigaEventListener {
                 () -> bgReadCharacteristic(connectionHandle, characteristicHandle));
     }
 
-    BlueGigaProcedureCompletedEvent writeCharacteristic(int connectionHandle, int characteristicHandle,
-                                                                    int[] data) {
+    BlueGigaProcedureCompletedEvent writeCharacteristic(int connectionHandle, int characteristicHandle, int[] data) {
         return syncCall(BlueGigaProcedureCompletedEvent.class,
                 (p) -> p.getConnection() == connectionHandle && p.getChrHandle() == characteristicHandle,
                 () -> bgWriteCharacteristic(connectionHandle, characteristicHandle, data));

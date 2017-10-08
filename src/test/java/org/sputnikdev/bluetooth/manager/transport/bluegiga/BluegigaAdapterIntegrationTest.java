@@ -15,7 +15,7 @@ public class BluegigaAdapterIntegrationTest {
     @Test
     public void testCreateAdapter() throws UnsupportedEncodingException, InterruptedException {
         String portName = "/dev/tty.usbmodem1";
-        BluegigaAdapter bluetoothAdapter = new BluegigaAdapter(portName);
+        BluegigaAdapter bluetoothAdapter = new BluegigaAdapter(new BluegigaHandler(portName));
         assertTrue(bluetoothAdapter.isAlive());
         assertEquals(portName, bluetoothAdapter.getPortName());
         assertEquals(new URL("bluegiga://88:6B:0F:01:90:CA"), bluetoothAdapter.getURL());
