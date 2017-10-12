@@ -73,14 +73,6 @@ public class BluegigaAdapter implements Adapter, BlueGigaEventListener {
     }
 
     @Override
-    public String getAlias() {
-        return null;
-    }
-
-    @Override
-    public void setAlias(String alias) { }
-
-    @Override
     public boolean isDiscovering() {
         return discovering;
     }
@@ -115,25 +107,6 @@ public class BluegigaAdapter implements Adapter, BlueGigaEventListener {
         return discoveryStatus;
     }
 
-    /*
-       Note: It is unknown if it is possible to control "powered" state of BG dongles,
-       can "USB Enable" be used (see BG spec)?
-     */
-
-    @Override
-    public void setPowered(boolean b) { }
-
-    @Override
-    public boolean isPowered() {
-        return true;
-    }
-
-    @Override
-    public void enablePoweredNotifications(Notification<Boolean> notification) { }
-
-    @Override
-    public void disablePoweredNotifications() { }
-
     @Override
     public List<Device> getDevices() {
         return new ArrayList<>(devices.values());
@@ -157,14 +130,10 @@ public class BluegigaAdapter implements Adapter, BlueGigaEventListener {
     public void bluegigaEventReceived(BlueGigaResponse event) {
         if (event instanceof BlueGigaScanResponseEvent) {
             BlueGigaScanResponseEvent scanEvent = (BlueGigaScanResponseEvent) event;
-            if (!isAlive()) {
-                return;
-            }
             synchronized (devices) {
                 URL deviceURL = getURL().copyWithDevice(scanEvent.getSender());
-                BluegigaDevice bluegigaDevice;
                 if (!devices.containsKey(deviceURL)) {
-                    bluegigaDevice = new BluegigaDevice(bgHandler, deviceURL);
+                    BluegigaDevice bluegigaDevice = createDevice(deviceURL);
                     devices.put(deviceURL, bluegigaDevice);
                     // let the device to set its name and RSSI
                     bluegigaDevice.handleScanEvent(scanEvent);
@@ -175,18 +144,47 @@ public class BluegigaAdapter implements Adapter, BlueGigaEventListener {
         }
     }
 
+    /*
+    The following methods are not supporeted by Bluegiga
+     */
+
+    @Override
+    public void setPowered(boolean powered) { }
+
+    @Override
+    public boolean isPowered() {
+        return true;
+    }
+
+    @Override
+    public void enablePoweredNotifications(Notification<Boolean> notification) { }
+
+    @Override
+    public void disablePoweredNotifications() { }
+
+    @Override
+    public String getAlias() {
+        return null;
+    }
+
+    @Override
+    public void setAlias(String alias) { }
+
     BluegigaDevice getDevice(URL url) {
         URL deviceURL = url.getDeviceURL();
         synchronized (devices) {
-            BluegigaDevice bluegigaDevice;
             if (devices.containsKey(deviceURL)) {
                 return devices.get(deviceURL);
             } else {
-                bluegigaDevice = new BluegigaDevice(bgHandler, deviceURL);
+                BluegigaDevice bluegigaDevice = createDevice(deviceURL);
                 devices.put(deviceURL, bluegigaDevice);
                 return bluegigaDevice;
             }
         }
+    }
+
+    BluegigaDevice createDevice(URL address) {
+        return new BluegigaDevice(bgHandler, address);
     }
 
     private void notifyDiscovering(boolean isDiscovering) {

@@ -39,8 +39,17 @@ import org.sputnikdev.bluetooth.manager.transport.Device;
 import org.sputnikdev.bluetooth.manager.transport.Notification;
 import org.sputnikdev.bluetooth.manager.transport.Service;
 
-import java.util.*;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.UUID;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -50,11 +59,16 @@ import java.util.stream.Collectors;
  */
 class BluegigaDevice implements Device, BlueGigaEventListener {
 
+    private static final int DISCOVERY_TIMEOUT = 10;
+    private static final Pattern DEFAULT_UUID_REPLACEMENT =
+        Pattern.compile("-0000-0000-0000-000000000000", Pattern.LITERAL);
+    private static final String DEFAULT_UUID = "-0000-1000-8000-00805f9b34fb";
     private final Logger logger = LoggerFactory.getLogger(BluegigaDevice.class);
     private final URL url;
     private final BluegigaHandler bgHandler;
     private String name;
     private short rssi;
+    private Instant lastDiscovered;
     private int bluetoothClass;
     private boolean bleEnabled;
     private boolean serviceResolved;
@@ -167,6 +181,8 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     public short getRSSI() {
         if (isConnected()) {
             rssi = bgHandler.bgGetRssi(connectionHandle);
+        } else if (lastDiscovered == null || lastDiscovered.isBefore(Instant.now().minusSeconds(DISCOVERY_TIMEOUT))) {
+            return 0;
         }
         return rssi;
     }
@@ -257,6 +273,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
                 }
             }
             this.rssi = (short) scanEvent.getRssi();
+            this.lastDiscovered = Instant.now();
             notifyRSSIChanged(this.rssi);
         }
     }
@@ -314,7 +331,8 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     }
 
     private BluegigaService convert(BlueGigaGroupFoundEvent event) {
-        return new BluegigaService(url.copyWith(event.getUuid().toString(), null), event.getStart(), event.getEnd());
+        return new BluegigaService(url.copyWith(getUUID(event.getUuid()), null),
+            event.getStart(), event.getEnd());
     }
 
     private void processAttributes(List<BlueGigaFindInformationFoundEvent> events) {
@@ -349,20 +367,20 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
             if (shortUUID >= 0x2800 && shortUUID <= 0x280F) {
                 // Declarations (https://www.bluetooth.com/specifications/gatt/declarations)
                 // we will skip them as we are not interested in them
-                logger.debug("Skipping a declaration: " + attributeUUID.toString());
+                logger.debug("Skipping a declaration: " + attributeUUID);
             } else {
                 BluegigaService bluegigaService = getServiceByHandle(event.getChrHandle());
                 if (bluegigaService == null) {
-                    throw new BluegigaException("Could not find a service by characteristic handle: " +
-                            event.getChrHandle());
+                    throw new BluegigaException("Could not find a service by characteristic handle: "
+                        + event.getChrHandle());
                 }
-                URL attributeURL = bluegigaService.getURL().copyWithCharacteristic(event.getUuid().toString());
+                URL attributeURL = bluegigaService.getURL().copyWithCharacteristic(getUUID(event.getUuid()));
                 if (shortUUID >= 0x2900 && shortUUID <= 0x290F) {
                     // Descriptors (https://www.bluetooth.com/specifications/gatt/descriptors)
                     if (characteristic == null) {
-                        logger.warn("Came across a descriptor, but there is not any characteristic so far... " +
-                                "Characteristic should go first followed by its descriptors. {}",
-                                attributeUUID.toString());
+                        logger.warn("Came across a descriptor, but there is not any characteristic so far... "
+                                + "Characteristic should go first followed by its descriptors. {}",
+                                attributeUUID);
                         throw new IllegalStateException("A characteristic was expected to go first");
                     }
                     BluegigaDescriptor descriptor = new BluegigaDescriptor(bgHandler, attributeURL,
@@ -376,6 +394,10 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
                 }
             }
         }
+    }
+
+    private static String getUUID(UUID uuid) {
+        return DEFAULT_UUID_REPLACEMENT.matcher(uuid.toString()).replaceAll(Matcher.quoteReplacement(DEFAULT_UUID));
     }
 
     private void processDeclaration(BlueGigaAttributeValueEvent event) {
@@ -410,10 +432,10 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
         BluegigaService service = getServiceByHandle(event.getAttHandle());
         if (service != null) {
-            UUID characteristicUUID = BluegigaUtils.deserializeUUID(
-                    Arrays.copyOfRange(attributeValue, 3, attributeValue.length));
+            String characteristicUUID = getUUID(BluegigaUtils.deserializeUUID(
+                    Arrays.copyOfRange(attributeValue, 3, attributeValue.length)));
             BluegigaCharacteristic bluegigaCharacteristic =
-                    service.getCharacteristic(service.getURL().copyWithCharacteristic(characteristicUUID.toString()));
+                    service.getCharacteristic(service.getURL().copyWithCharacteristic(characteristicUUID));
             if (bluegigaCharacteristic != null) {
                 bluegigaCharacteristic.setFlags(CharacteristicAccessType.parse(attributeValue[0]));
             } else {

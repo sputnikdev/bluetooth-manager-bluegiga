@@ -124,8 +124,8 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
         Notification<byte[]> notification = this.valueNotification;
         if (notification != null && event instanceof BlueGigaAttributeValueEvent) {
             BlueGigaAttributeValueEvent attributeValueEvent = (BlueGigaAttributeValueEvent) event;
-            if (attributeValueEvent.getConnection() == connectionHandle &&
-                    attributeValueEvent.getAttHandle() == characteristicHandle) {
+            if (attributeValueEvent.getConnection() == connectionHandle
+                && attributeValueEvent.getAttHandle() == characteristicHandle) {
                 notification.notify(BluegigaUtils.fromInts(attributeValueEvent.getValue()));
             }
         }
@@ -145,8 +145,8 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
         BluegigaDescriptor configuration = getConfigurationDescriptor();
 
         if (configuration == null) {
-            logger.error("Could not subscribe to a notification, " +
-                    "because configuration descriptor was not found: {}", url);
+            logger.error("Could not subscribe to a notification, "
+                + "because configuration descriptor was not found: {}", url);
             return;
         }
 
@@ -171,6 +171,6 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
     }
 
     private BluegigaDescriptor getConfigurationDescriptor() {
-        return descriptors.get(url.copyWithCharacteristic("00002902-0000-0000-0000-000000000000"));
+        return descriptors.get(url.copyWithCharacteristic("00002902-0000-1000-8000-00805f9b34fb"));
     }
 }
