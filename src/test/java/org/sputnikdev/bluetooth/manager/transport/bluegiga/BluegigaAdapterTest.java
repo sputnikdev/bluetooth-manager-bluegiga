@@ -6,6 +6,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.internal.util.reflection.Whitebox;
 import org.mockito.runners.MockitoJUnitRunner;
 import org.sputnikdev.bluetooth.URL;
@@ -21,6 +22,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
@@ -138,6 +140,19 @@ public class BluegigaAdapterTest {
     }
 
     @Test
+    public void testNotifyDiscoveringWithException() {
+        when(bluegigaHandler.bgStartScanning(true)).thenReturn(true);
+
+        Notification<Boolean> notification = mock(Notification.class);
+        doThrow(IllegalStateException.class).when(notification).notify(true);
+
+        bluegigaAdapter.enableDiscoveringNotifications(notification);
+
+        bluegigaAdapter.startDiscovery();
+        verify(notification).notify(true);
+    }
+
+    @Test
     public void testPowered() throws Exception {
         // Setting adapter powered state is not supported by Bluegiga
         bluegigaAdapter.enablePoweredNotifications(new Notification<Boolean>() {
@@ -199,12 +214,18 @@ public class BluegigaAdapterTest {
 
     @Test
     public void testGetDevice() throws Exception {
-        String deviceAddress = "11:22:33:44:55:66";
-        bluegigaAdapter.bluegigaEventReceived(mockDevice(deviceAddress));
+        String existingDeviceAddress = "11:22:33:44:55:66";
+        String newDeviceAddress = "11:11:11:11:11:11";
 
-        Device device = bluegigaAdapter.getDevice(ADAPTER_URL.copyWithDevice(deviceAddress));
-        assertNotNull(device);
-        assertEquals(deviceAddress, device.getURL().getDeviceAddress());
+        bluegigaAdapter.bluegigaEventReceived(mockDevice(existingDeviceAddress));
+
+        Device existingDevice = bluegigaAdapter.getDevice(ADAPTER_URL.copyWithDevice(existingDeviceAddress));
+        assertNotNull(existingDevice);
+        assertEquals(existingDeviceAddress, existingDevice.getURL().getDeviceAddress());
+
+        Device newDevice = bluegigaAdapter.getDevice(ADAPTER_URL.copyWithDevice(newDeviceAddress));
+        assertNotNull(newDevice);
+        assertEquals(newDeviceAddress, newDevice.getURL().getDeviceAddress());
     }
 
     private BlueGigaScanResponseEvent mockDevice(String address) {

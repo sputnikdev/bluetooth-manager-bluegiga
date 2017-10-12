@@ -31,10 +31,14 @@ import org.sputnikdev.bluetooth.manager.transport.Adapter;
 import org.sputnikdev.bluetooth.manager.transport.Device;
 import org.sputnikdev.bluetooth.manager.transport.Notification;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
- *
+ * Bluegiga transport adapter.
  * @author Vlad Kolotov
  * @author Chris Jackson
  */
@@ -120,9 +124,7 @@ public class BluegigaAdapter implements Adapter, BlueGigaEventListener {
     @Override
     public void dispose() {
         bgHandler.removeEventListener(this);
-        synchronized (devices) {
-            devices.clear();
-        }
+        devices.clear();
         bgHandler.dispose();
     }
 
