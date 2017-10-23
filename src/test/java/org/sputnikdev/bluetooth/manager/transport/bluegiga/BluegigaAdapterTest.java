@@ -208,7 +208,7 @@ public class BluegigaAdapterTest {
 
         assertEquals(device, bluegigaAdapter.getDevices().get(0));
 
-        verify(device).handleScanEvent(event);
+        verify(device).bluegigaEventReceived(event);
         verify(bluegigaAdapter).createDevice(deviceURL);
     }
 
