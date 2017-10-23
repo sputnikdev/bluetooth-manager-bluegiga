@@ -2,7 +2,7 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
 
 /*-
  * #%L
- * org.sputnikdev:bluetooth-manager
+ * org.sputnikdev:bluetooth-manager-bluegiga
  * %%
  * Copyright (C) 2017 Sputnik Dev
  * %%
@@ -29,6 +29,7 @@ import java.util.UUID;
 /**
  *
  * @author Vlad Kolotov
+ * @author Chris Jackson
  */
 class BluegigaUtils {
 

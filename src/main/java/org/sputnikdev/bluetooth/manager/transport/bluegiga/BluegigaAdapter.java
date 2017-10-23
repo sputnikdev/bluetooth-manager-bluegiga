@@ -2,7 +2,7 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
 
 /*-
  * #%L
- * org.sputnikdev:bluetooth-manager
+ * org.sputnikdev:bluetooth-manager-bluegiga
  * %%
  * Copyright (C) 2017 Sputnik Dev
  * %%
@@ -138,7 +138,7 @@ public class BluegigaAdapter implements Adapter, BlueGigaEventListener {
                     BluegigaDevice bluegigaDevice = createDevice(deviceURL);
                     devices.put(deviceURL, bluegigaDevice);
                     // let the device to set its name and RSSI
-                    bluegigaDevice.handleScanEvent(scanEvent);
+                    bluegigaDevice.bluegigaEventReceived(scanEvent);
                     logger.debug("Discovered: {} ({}) {} ", bluegigaDevice.getURL().getDeviceAddress(),
                             bluegigaDevice.getName(), bluegigaDevice.getRSSI());
                 }

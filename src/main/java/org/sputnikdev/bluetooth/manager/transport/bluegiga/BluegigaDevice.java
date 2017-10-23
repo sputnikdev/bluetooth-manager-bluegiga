@@ -2,7 +2,7 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
 
 /*-
  * #%L
- * org.sputnikdev:bluetooth-manager
+ * org.sputnikdev:bluetooth-manager-bluegiga
  * %%
  * Copyright (C) 2017 Sputnik Dev
  * %%
@@ -53,13 +53,13 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- *
+ * Bluegiga transport device.
  * @author Vlad Kolotov
  * @author Chris Jackson
  */
 class BluegigaDevice implements Device, BlueGigaEventListener {
 
-    private static final int DISCOVERY_TIMEOUT = 10;
+    static final int DISCOVERY_TIMEOUT = 10;
     private static final Pattern DEFAULT_UUID_REPLACEMENT =
         Pattern.compile("-0000-0000-0000-000000000000", Pattern.LITERAL);
     private static final String DEFAULT_UUID = "-0000-1000-8000-00805f9b34fb";
@@ -92,28 +92,13 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     public boolean connect() {
         if (!isConnected()) {
 
-            logger.info("Trying to connect: {}", url);
-            BlueGigaConnectionStatusEvent event = bgHandler.connect(url);
-            logger.info("Connected: {}", url);
+            performConnection();
 
-            this.connectionHandle = event.getConnection();
-            notifyConnected(true);
+            discoverServices();
 
-            logger.info("Discovering services: {}", url);
-            // discover services
-            bgHandler.getServices(connectionHandle)
-                    .stream().map(this::convert).forEach(service -> services.put(service.getURL(), service));
-            logger.info("Services discovered: {}", services.size());
+            discoverCharacteristics();
 
-            logger.info("Discovering characteristics: {}", url);
-            // discover characteristics and their descriptors
-            processAttributes(bgHandler.getCharacteristics(connectionHandle));
-            logger.info("Characteristics discovered");
-
-            logger.info("Discovering declarations: {}", url);
-            // discover characteristic properties (access flags)
-            bgHandler.getDeclarations(connectionHandle).forEach(this::processDeclaration);
-            logger.info("Declarations discovered: {}", url);
+            discoverDeclarations();
 
             serviceResolved();
 
@@ -126,6 +111,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     public boolean disconnect() {
         if (isConnected()) {
             servicesUnresolved();
+            notifyConnected(false);
             bgHandler.disconnect(connectionHandle);
             connectionHandle = -1;
             return true;
@@ -140,41 +126,12 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public String getName() {
-        return name;
-    }
-
-    @Override
-    public String getAlias() {
-        return null;
-    }
-
-    @Override
-    public void setAlias(String alias) {
-
-    }
-
-    @Override
-    public boolean isBlocked() {
-        return false;
-    }
-
-    @Override
-    public void setBlocked(boolean blocked) {
+        return name == null ? url.getDeviceAddress() : name;
     }
 
     @Override
     public boolean isBleEnabled() {
         return bleEnabled;
-    }
-
-    @Override
-    public void enableBlockedNotifications(Notification<Boolean> notification) {
-
-    }
-
-    @Override
-    public void disableBlockedNotifications() {
-
     }
 
     @Override
@@ -204,7 +161,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public void enableConnectedNotifications(Notification<Boolean> notification) {
-        this.connectedNotification = notification;
+        connectedNotification = notification;
     }
 
     @Override
@@ -244,43 +201,118 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public void bluegigaEventReceived(BlueGigaResponse event) {
+
         if (event instanceof BlueGigaScanResponseEvent) {
             handleScanEvent((BlueGigaScanResponseEvent) event);
         } else if (event instanceof BlueGigaDisconnectedEvent) {
-            servicesUnresolved();
-            connectionHandle = -1;
+            handleDisconnectedEvent((BlueGigaDisconnectedEvent) event);
         }
     }
 
-    void handleScanEvent(BlueGigaScanResponseEvent scanEvent) {
+    /*
+        Alias can be possible set to a characteristic
+     */
+    @Override
+    public String getAlias() {
+        //TODO use 2a00 characteristic to set/get device alias (if possible at all)
+        return null;
+    }
+
+    @Override
+    public void setAlias(String alias) {
+        //TODO use 2a00 characteristic to set/get device alias (if possible at all)
+    }
+
+    /*
+        Blocking is not supported by Bluegiga devices
+     */
+    @Override
+    public void setBlocked(boolean blocked) { }
+
+    @Override
+    public boolean isBlocked() {
+        return false;
+    }
+
+    @Override
+    public void enableBlockedNotifications(Notification<Boolean> notification) { }
+
+    @Override
+    public void disableBlockedNotifications() { }
+
+    BluegigaService getService(URL url) {
+        synchronized (services) {
+            return services.get(url.getServiceURL());
+        }
+    }
+
+    void performConnection() {
+        logger.info("Trying to connect: {}", url);
+        BlueGigaConnectionStatusEvent event = bgHandler.connect(url);
+        logger.info("Connected: {}", url);
+
+        connectionHandle = event.getConnection();
+        notifyConnected(true);
+    }
+
+    void discoverServices() {
+        logger.info("Discovering services: {}", url);
+        // discover services
+        bgHandler.getServices(connectionHandle)
+            .stream().map(this::convert).forEach(service -> services.put(service.getURL(), service));
+        logger.info("Services discovered: {}", services.size());
+    }
+
+    void discoverCharacteristics() {
+        logger.info("Discovering characteristics: {}", url);
+        // discover characteristics and their descriptors
+        processAttributes(bgHandler.getCharacteristics(connectionHandle));
+        logger.info("Characteristics discovered");
+    }
+
+    void discoverDeclarations() {
+        logger.info("Discovering declarations: {}", url);
+        // discover characteristic properties (access flags)
+        bgHandler.getDeclarations(connectionHandle).forEach(this::processDeclaration);
+        logger.info("Declarations discovered: {}", url);
+    }
+
+    int getConnectionHandle() {
+        return connectionHandle;
+    }
+
+    private void handleScanEvent(BlueGigaScanResponseEvent scanEvent) {
         if (url.getDeviceAddress().equals(scanEvent.getSender())) {
             if (scanEvent.getData() != null) {
                 Map<EirDataType, Object> eir = new EirPacket(scanEvent.getData()).getRecords();
 
                 if (eir.containsKey(EirDataType.EIR_NAME_LONG) || eir.containsKey(EirDataType.EIR_NAME_SHORT)) {
-                    this.name = String.valueOf(eir.getOrDefault(EirDataType.EIR_NAME_LONG,
+                    name = String.valueOf(eir.getOrDefault(EirDataType.EIR_NAME_LONG,
                             eir.getOrDefault(EirDataType.EIR_NAME_SHORT, null)));
                 }
 
                 if (eir.containsKey(EirDataType.EIR_DEVICE_CLASS)) {
-                    this.bluetoothClass = (int) eir.get(EirDataType.EIR_DEVICE_CLASS);
+                    bluetoothClass = (int) eir.get(EirDataType.EIR_DEVICE_CLASS);
                 }
 
                 if (eir.containsKey(EirDataType.EIR_FLAGS)) {
                     List<EirFlags> eirFlags = (List<EirFlags>) eir.get(EirDataType.EIR_FLAGS);
                     // any flag would mean that the device is BLE enabled
-                    this.bleEnabled = !eirFlags.isEmpty();
+                    bleEnabled = !eirFlags.isEmpty();
                 }
             }
-            this.rssi = (short) scanEvent.getRssi();
-            this.lastDiscovered = Instant.now();
-            notifyRSSIChanged(this.rssi);
+            rssi = (short) scanEvent.getRssi();
+            lastDiscovered = Instant.now();
+            notifyRSSIChanged(rssi);
         }
     }
 
-    BluegigaService getService(URL url) {
-        synchronized (services) {
-            return services.get(url.getServiceURL());
+    private void handleDisconnectedEvent(BlueGigaDisconnectedEvent event) {
+        if (connectionHandle == event.getConnection()) {
+            logger.info("Disconnecion even received {}. Reason: {}.", url, event.getReason());
+            servicesUnresolved();
+            notifyConnected(false);
+            connectionHandle = -1;
         }
     }
 
@@ -289,12 +321,12 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
             services.clear();
         }
         notifyServicesResolved(false);
-        this.serviceResolved = false;
+        serviceResolved = false;
     }
 
     private void serviceResolved() {
         notifyServicesResolved(true);
-        this.serviceResolved = true;
+        serviceResolved = true;
     }
 
     private void notifyRSSIChanged(short rssi) {
@@ -404,31 +436,31 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
         //  characteristic declaration
         int[] attributeValue = event.getValue();
 
-            /*
-            It always contains a handle, a UUID, and a set of properties. These three elements describe the subsequent
-            Characteristic Value Declaration. The handle naturally points to the Characteristic Value Declaration’s
-            place in the attribute table. The UUID describes what type of information or value we can expect to find
-            in the Characteristic Value Declaration. For example, a temperature value, the state of a light switch,
-            or some custom arbitrary value. And finally, the properties describe how the characteristic value can be
-            interacted with.
-            Example: 10-0E-00-37-2A
-                0x2A37 is the characteristic UUID
-                000E is the declaration handle
-                10 is the characteristic properties as per this table:
+        /*
+        It always contains a handle, a UUID, and a set of properties. These three elements describe the subsequent
+        Characteristic Value Declaration. The handle naturally points to the Characteristic Value Declaration&rsquo;s
+        place in the attribute table. The UUID describes what type of information or value we can expect to find
+        in the Characteristic Value Declaration. For example, a temperature value, the state of a light switch,
+        or some custom arbitrary value. And finally, the properties describe how the characteristic value can be
+        interacted with.
+        Example: 10-0E-00-37-2A
+            0x2A37 is the characteristic UUID
+            000E is the declaration handle
+            10 is the characteristic properties as per this table:
 
-                Broadcast                       0x01
-                Read                            0x02
-                Write without response          0x04
-                Write                           0x08
-                Notify                          0x10
-                Indicate                        0x20
-                Authenticated signed writes     0x40
-                Extended properties             0x80
+            Broadcast                       0x01
+            Read                            0x02
+            Write without response          0x04
+            Write                           0x08
+            Notify                          0x10
+            Indicate                        0x20
+            Authenticated signed writes     0x40
+            Extended properties             0x80
 
-             Taken from a tutorial: https://devzone.nordicsemi.com/tutorials/17/
-             Official spec:
-             https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.attribute.gatt.characteristic_declaration.xml
-             */
+         Taken from a tutorial: https://devzone.nordicsemi.com/tutorials/17/
+         Official spec:
+         https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.attribute.gatt.characteristic_declaration.xml
+         */
 
         BluegigaService service = getServiceByHandle(event.getAttHandle());
         if (service != null) {

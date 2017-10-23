@@ -2,7 +2,7 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
 
 /*-
  * #%L
- * org.sputnikdev:bluetooth-manager
+ * org.sputnikdev:bluetooth-manager-bluegiga
  * %%
  * Copyright (C) 2017 Sputnik Dev
  * %%
@@ -29,6 +29,7 @@ import org.slf4j.LoggerFactory;
 import org.sputnikdev.bluetooth.URL;
 import org.sputnikdev.bluetooth.manager.transport.Characteristic;
 import org.sputnikdev.bluetooth.manager.transport.CharacteristicAccessType;
+import org.sputnikdev.bluetooth.manager.transport.Descriptor;
 import org.sputnikdev.bluetooth.manager.transport.Notification;
 
 import java.util.*;
@@ -121,7 +122,7 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
 
     @Override
     public void bluegigaEventReceived(BlueGigaResponse event) {
-        Notification<byte[]> notification = this.valueNotification;
+        Notification<byte[]> notification = valueNotification;
         if (notification != null && event instanceof BlueGigaAttributeValueEvent) {
             BlueGigaAttributeValueEvent attributeValueEvent = (BlueGigaAttributeValueEvent) event;
             if (attributeValueEvent.getConnection() == connectionHandle
@@ -134,6 +135,12 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
     void addDescriptor(BluegigaDescriptor descriptor) {
         synchronized (descriptors) {
             descriptors.put(descriptor.getURL(), descriptor);
+        }
+    }
+
+    Set<BluegigaDescriptor> getDescriptors() {
+        synchronized (descriptors) {
+            return new HashSet<>(descriptors.values());
         }
     }
 
