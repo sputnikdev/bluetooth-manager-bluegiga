@@ -7,6 +7,7 @@ import com.zsmartsystems.bluetooth.bluegiga.command.connection.BlueGigaConnectio
 import com.zsmartsystems.bluetooth.bluegiga.command.connection.BlueGigaDisconnectedEvent;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaScanResponseEvent;
 import com.zsmartsystems.bluetooth.bluegiga.eir.EirDataType;
+import com.zsmartsystems.bluetooth.bluegiga.enumeration.BgApiResponse;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -33,6 +34,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.anyBoolean;
@@ -41,6 +43,7 @@ import static org.mockito.Matchers.anyShort;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -118,7 +121,7 @@ public class BluegigaDeviceTest {
         assertTrue(bluegigaDevice.connect());
 
         InOrder inOrder = Mockito.inOrder(bluegigaDevice);
-        inOrder.verify(bluegigaDevice).performConnection();
+        inOrder.verify(bluegigaDevice).establishConnection();
         inOrder.verify(bluegigaDevice).discoverServices();
         inOrder.verify(bluegigaDevice).discoverCharacteristics();
         inOrder.verify(bluegigaDevice).discoverDeclarations();
@@ -293,7 +296,8 @@ public class BluegigaDeviceTest {
     }
 
     @Test
-    public void getServices() throws Exception {
+    public void testGetServices() throws Exception {
+
     }
 
     @Test
@@ -303,10 +307,49 @@ public class BluegigaDeviceTest {
 
     @Test
     public void dispose() throws Exception {
+        // do nothing
     }
 
     @Test
     public void getService() throws Exception {
+        bluegigaDevice.connect();
+        assertTrue(bluegigaDevice.isConnected());
+        assertNotNull(bluegigaDevice.getService(BATTERY_SERVICE_URL));
+    }
+
+    @Test
+    public void testBluegigaEventReceived() {
+        Notification<Boolean> servicesResovedNotification = mock(Notification.class);
+        Notification<Boolean> connectedNotification = mock(Notification.class);
+
+        bluegigaDevice.enableConnectedNotifications(connectedNotification);
+        bluegigaDevice.enableServicesResolvedNotifications(servicesResovedNotification);
+
+        bluegigaDevice.bluegigaEventReceived(mockScanResponse((short) -100));
+        assertEquals(-100, bluegigaDevice.getRSSI());
+
+        bluegigaDevice.connect();
+        assertTrue(bluegigaDevice.isConnected());
+
+        BlueGigaDisconnectedEvent disconnectedEvent = mock(BlueGigaDisconnectedEvent.class);
+        bluegigaDevice.bluegigaEventReceived(disconnectedEvent);
+        assertTrue(bluegigaDevice.isConnected());
+        verify(connectedNotification, never()).notify(false);
+        verify(servicesResovedNotification, never()).notify(false);
+
+        when(disconnectedEvent.getConnection()).thenReturn(CONNECTION_HANDLE);
+        when(disconnectedEvent.getReason()).thenReturn(BgApiResponse.CONNECTION_TERMINATED_BY_LOCAL_HOST);
+        bluegigaDevice.bluegigaEventReceived(disconnectedEvent);
+        assertFalse(bluegigaDevice.isConnected());
+        verify(connectedNotification, never()).notify(false);
+        verify(servicesResovedNotification, never()).notify(false);
+
+        bluegigaDevice.connect();
+        when(disconnectedEvent.getReason()).thenReturn(BgApiResponse.TIMEOUT);
+        bluegigaDevice.bluegigaEventReceived(disconnectedEvent);
+        assertFalse(bluegigaDevice.isConnected());
+        verify(connectedNotification).notify(false);
+        verify(servicesResovedNotification).notify(false);
     }
 
     private void assertServices() {

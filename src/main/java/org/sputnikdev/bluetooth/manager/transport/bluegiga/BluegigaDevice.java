@@ -31,6 +31,7 @@ import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaScanResponseEven
 import com.zsmartsystems.bluetooth.bluegiga.eir.EirDataType;
 import com.zsmartsystems.bluetooth.bluegiga.eir.EirFlags;
 import com.zsmartsystems.bluetooth.bluegiga.eir.EirPacket;
+import com.zsmartsystems.bluetooth.bluegiga.enumeration.BgApiResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.sputnikdev.bluetooth.URL;
@@ -92,7 +93,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     public boolean connect() {
         if (!isConnected()) {
 
-            performConnection();
+            establishConnection();
 
             discoverServices();
 
@@ -201,7 +202,6 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public void bluegigaEventReceived(BlueGigaResponse event) {
-
         if (event instanceof BlueGigaScanResponseEvent) {
             handleScanEvent((BlueGigaScanResponseEvent) event);
         } else if (event instanceof BlueGigaDisconnectedEvent) {
@@ -246,7 +246,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
         }
     }
 
-    void performConnection() {
+    void establishConnection() {
         logger.info("Trying to connect: {}", url);
         BlueGigaConnectionStatusEvent event = bgHandler.connect(url);
         logger.info("Connected: {}", url);
@@ -310,8 +310,10 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     private void handleDisconnectedEvent(BlueGigaDisconnectedEvent event) {
         if (connectionHandle == event.getConnection()) {
             logger.info("Disconnecion even received {}. Reason: {}.", url, event.getReason());
-            servicesUnresolved();
-            notifyConnected(false);
+            if (event.getReason() != BgApiResponse.CONNECTION_TERMINATED_BY_LOCAL_HOST) {
+                servicesUnresolved();
+                notifyConnected(false);
+            }
             connectionHandle = -1;
         }
     }

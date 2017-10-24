@@ -93,7 +93,7 @@ public class BluegigaAdapter implements Adapter, BlueGigaEventListener {
 
     @Override
     public boolean startDiscovery() {
-        boolean discoveryStatus = bgHandler.bgStartScanning(true);
+        boolean discoveryStatus = bgHandler.bgStartScanning();
         if (!discovering && discoveryStatus) {
             discovering = true;
             notifyDiscovering(true);

@@ -6,7 +6,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.internal.util.reflection.Whitebox;
 import org.mockito.runners.MockitoJUnitRunner;
 import org.sputnikdev.bluetooth.URL;
@@ -20,7 +19,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -102,7 +100,7 @@ public class BluegigaAdapterTest {
 
     @Test
     public void testStartStopDiscovering() throws Exception {
-        when(bluegigaHandler.bgStartScanning(true)).thenReturn(false).thenReturn(true);
+        when(bluegigaHandler.bgStartScanning()).thenReturn(false).thenReturn(true);
         when(bluegigaHandler.bgStopProcedure()).thenReturn(false).thenReturn(true);
 
         bluegigaAdapter.enableDiscoveringNotifications(discoveringNotification);
@@ -110,12 +108,12 @@ public class BluegigaAdapterTest {
         bluegigaAdapter.startDiscovery();
         verify(discoveringNotification, never()).notify(true);
         assertFalse(bluegigaAdapter.isDiscovering());
-        verify(bluegigaHandler).bgStartScanning(true);
+        verify(bluegigaHandler).bgStartScanning();
 
         bluegigaAdapter.startDiscovery();
         verify(discoveringNotification).notify(true);
         assertTrue(bluegigaAdapter.isDiscovering());
-        verify(bluegigaHandler, times(2)).bgStartScanning(true);
+        verify(bluegigaHandler, times(2)).bgStartScanning();
 
         bluegigaAdapter.stopDiscovery();
         verify(discoveringNotification, never()).notify(false);
@@ -130,7 +128,7 @@ public class BluegigaAdapterTest {
         bluegigaAdapter.disableDiscoveringNotifications();
         bluegigaAdapter.startDiscovery();
         assertTrue(bluegigaAdapter.isDiscovering());
-        verify(bluegigaHandler, times(3)).bgStartScanning(true);
+        verify(bluegigaHandler, times(3)).bgStartScanning();
 
         bluegigaAdapter.stopDiscovery();
         assertFalse(bluegigaAdapter.isDiscovering());
@@ -141,7 +139,7 @@ public class BluegigaAdapterTest {
 
     @Test
     public void testNotifyDiscoveringWithException() {
-        when(bluegigaHandler.bgStartScanning(true)).thenReturn(true);
+        when(bluegigaHandler.bgStartScanning()).thenReturn(true);
 
         Notification<Boolean> notification = mock(Notification.class);
         doThrow(IllegalStateException.class).when(notification).notify(true);

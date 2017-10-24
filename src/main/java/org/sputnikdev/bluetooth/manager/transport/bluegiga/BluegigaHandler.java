@@ -80,6 +80,8 @@ class BluegigaHandler implements BlueGigaEventListener {
     private static final int ACTIVE_SCAN_INTERVAL = 0x40;
     private static final int ACTIVE_SCAN_WINDOW = 0x20;
 
+    private boolean discovering;
+
     // synchronisation objects (used in conversion of async processes to be synchronous)
     private final EventCaptor eventsCaptor = new EventCaptor();
 
@@ -114,8 +116,17 @@ class BluegigaHandler implements BlueGigaEventListener {
     }
 
     BlueGigaConnectionStatusEvent connect(URL url) {
-        return syncCall(BlueGigaConnectionStatusEvent.class, p -> p.getAddress().equals(url.getDeviceAddress()),
-                () -> bgConnect(url));
+        // a workaround for a BGAPI bug when adapter becomes unstable when discovery is enabled within
+        // an attempt to connect to a device
+        if (discovering) {
+            bgStopProcedure();
+        }
+        BlueGigaConnectionStatusEvent result = syncCall(BlueGigaConnectionStatusEvent.class,
+            p -> p.getAddress().equals(url.getDeviceAddress()), () -> bgConnect(url));
+        if (discovering) {
+            bgStartScanning();
+        }
+        return result;
     }
 
     BlueGigaDisconnectedEvent disconnect(int connectionHandle) {
@@ -163,21 +174,22 @@ class BluegigaHandler implements BlueGigaEventListener {
     }
 
     /**
-     * Starts scanning on the dongle
-     *
-     * @param active true for active scanning
+     * Starts scanning on the dongle.
      */
-    boolean bgStartScanning(boolean active) {
-        BlueGigaSetScanParametersCommand scanCommand = new BlueGigaSetScanParametersCommand();
-        scanCommand.setActiveScanning(active);
-        scanCommand.setScanInterval(ACTIVE_SCAN_INTERVAL);
-        scanCommand.setScanWindow(ACTIVE_SCAN_WINDOW);
-        bgHandler.sendTransaction(scanCommand);
+    boolean bgStartScanning() {
+        synchronized (eventsCaptor) {
+            BlueGigaSetScanParametersCommand scanCommand = new BlueGigaSetScanParametersCommand();
+            scanCommand.setActiveScanning(true);
+            scanCommand.setScanInterval(ACTIVE_SCAN_INTERVAL);
+            scanCommand.setScanWindow(ACTIVE_SCAN_WINDOW);
+            bgHandler.sendTransaction(scanCommand);
 
-        BlueGigaDiscoverCommand discoverCommand = new BlueGigaDiscoverCommand();
-        discoverCommand.setMode(GapDiscoverMode.GAP_DISCOVER_OBSERVATION);
-        BlueGigaDiscoverResponse response = (BlueGigaDiscoverResponse)  bgHandler.sendTransaction(discoverCommand);
-        return response.getResult() == BgApiResponse.SUCCESS;
+            BlueGigaDiscoverCommand discoverCommand = new BlueGigaDiscoverCommand();
+            discoverCommand.setMode(GapDiscoverMode.GAP_DISCOVER_OBSERVATION);
+            BlueGigaDiscoverResponse response = (BlueGigaDiscoverResponse) bgHandler.sendTransaction(discoverCommand);
+            discovering = response.getResult() == BgApiResponse.SUCCESS;
+            return discovering;
+        }
     }
 
     short bgGetRssi(int connectionHandle) {
@@ -189,9 +201,12 @@ class BluegigaHandler implements BlueGigaEventListener {
     }
 
     boolean bgStopProcedure() {
-        BlueGigaCommand command = new BlueGigaEndProcedureCommand();
-        BlueGigaEndProcedureResponse response = (BlueGigaEndProcedureResponse) bgHandler.sendTransaction(command);
-        return response.getResult() == BgApiResponse.SUCCESS;
+        synchronized (eventsCaptor) {
+            BlueGigaCommand command = new BlueGigaEndProcedureCommand();
+            BlueGigaEndProcedureResponse response = (BlueGigaEndProcedureResponse) bgHandler.sendTransaction(command);
+            discovering = false;
+            return response.getResult() == BgApiResponse.SUCCESS;
+        }
     }
 
     void dispose() {
