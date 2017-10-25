@@ -31,7 +31,7 @@ import java.util.Map;
 
 
 /**
- *
+ * Bluegiga transport service.
  * @author Vlad Kolotov
  */
 class BluegigaService implements Service {
@@ -88,7 +88,7 @@ class BluegigaService implements Service {
         return handleEnd;
     }
 
-    private boolean match(BluegigaCharacteristic characteristic, String shortUUID) {
+    private static boolean match(BluegigaCharacteristic characteristic, String shortUUID) {
         return characteristic.getURL().getCharacteristicUUID().substring(0, 8).contains(shortUUID.toLowerCase());
     }
 }
