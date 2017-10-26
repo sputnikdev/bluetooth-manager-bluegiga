@@ -33,13 +33,17 @@ import org.sputnikdev.bluetooth.manager.transport.Descriptor;
 import org.sputnikdev.bluetooth.manager.transport.Notification;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
- *
+ * Bluegiga transport characteristic.
  * @author Vlad Kolotov
- * @author Chris Jackson
  */
 class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
+
+    private static final byte NOTIFYING_FLAG = 0b01;
+    private static final byte INDICATING_FLAG = 0b10;
+    private static final String CONFIGURATION_UUID = "00002902-0000-1000-8000-00805f9b34fb";
 
     private final Logger logger = LoggerFactory.getLogger(BluegigaCharacteristic.class);
     private final URL url;
@@ -72,7 +76,7 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
         if (flags.contains(CharacteristicAccessType.NOTIFY) || flags.contains(CharacteristicAccessType.INDICATE)) {
             byte[] configurationData = getConfiguration();
             if (configurationData != null && configurationData.length > 0) {
-                return (configurationData[0] & 0x3) > 0;
+                return (configurationData[0] & (NOTIFYING_FLAG | INDICATING_FLAG)) > 0;
             }
         }
         return false;
@@ -99,13 +103,13 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
     @Override
     public void enableValueNotifications(Notification<byte[]> notification) {
         toggleNotification(true);
-        this.valueNotification = notification;
+        valueNotification = notification;
     }
 
     @Override
     public void disableValueNotifications() {
         toggleNotification(false);
-        this.valueNotification = null;
+        valueNotification = null;
     }
 
     @Override
@@ -127,7 +131,11 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
             BlueGigaAttributeValueEvent attributeValueEvent = (BlueGigaAttributeValueEvent) event;
             if (attributeValueEvent.getConnection() == connectionHandle
                 && attributeValueEvent.getAttHandle() == characteristicHandle) {
-                notification.notify(BluegigaUtils.fromInts(attributeValueEvent.getValue()));
+                try {
+                    notification.notify(BluegigaUtils.fromInts(attributeValueEvent.getValue()));
+                } catch (Exception ex) {
+                    logger.error("Could not notify value changed notification", ex);
+                }
             }
         }
     }
@@ -144,26 +152,30 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
         }
     }
 
-    private void toggleNotification(boolean enabled) {
+    void toggleNotification(boolean enabled) {
         if (!(flags.contains(CharacteristicAccessType.NOTIFY) || flags.contains(CharacteristicAccessType.INDICATE))) {
             logger.error("The characteristic {} does not support neither notifications nor indications", url);
-            return;
+            throw new BluegigaException("The characteristic " + url
+                + " does not support neither notifications nor indications. The flags are: "
+                + flags.stream().map(Enum::toString).collect(Collectors.joining(", ")));
         }
         BluegigaDescriptor configuration = getConfigurationDescriptor();
 
         if (configuration == null) {
-            logger.error("Could not subscribe to a notification, "
-                + "because configuration descriptor was not found: {}", url);
-            return;
+            throw new BluegigaException("Could not subscribe to a notification, "
+                + "because configuration descriptor was not found: " + url);
         }
 
-        byte[] config;
+        byte[] config = {0x0};
 
-        if (flags.contains(CharacteristicAccessType.NOTIFY)) {
-            config = enabled ? new byte[] {0x1} : new byte[] {0x0};
-        } else {
-            config = enabled ? new byte[] {0x2} : new byte[] {0x0};
+        if (enabled) {
+            if (flags.contains(CharacteristicAccessType.NOTIFY)) {
+                config = new byte[] {NOTIFYING_FLAG};
+            } else if (flags.contains(CharacteristicAccessType.INDICATE)) {
+                config = new byte[] {INDICATING_FLAG};
+            }
         }
+
         if (!configuration.writeValue(config)) {
             throw new BluegigaException("Could not configure characteristic (enable/disable) notification: " + enabled);
         }
@@ -178,6 +190,6 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
     }
 
     private BluegigaDescriptor getConfigurationDescriptor() {
-        return descriptors.get(url.copyWithCharacteristic("00002902-0000-1000-8000-00805f9b34fb"));
+        return descriptors.get(url.copyWithCharacteristic(CONFIGURATION_UUID));
     }
 }
