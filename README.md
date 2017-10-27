@@ -4,6 +4,8 @@
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/ac4525af60a54879a5084d2fb441b170)](https://www.codacy.com/app/vkolotov/bluetooth-manager-bluegiga?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=sputnikdev/bluetooth-manager-bluegiga&amp;utm_campaign=Badge_Grade)
 [![Join the chat at https://gitter.im/sputnikdev/bluetooth-manager-bluegiga](https://badges.gitter.im/sputnikdev/bluetooth-manager-bluegiga.svg)](https://gitter.im/sputnikdev/bluetooth-manager-bluegiga?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 # bluetooth-manager-bluegiga
+
+[![Join the chat at https://gitter.im/sputnikdev/bluetooth-manager-bluegiga](https://badges.gitter.im/sputnikdev/bluetooth-manager-bluegiga.svg)](https://gitter.im/sputnikdev/bluetooth-manager-bluegiga?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 A transport implementation for Bluetooth Manager based on Bluegiga API to work with BLE112 dongles (or similar)
 
 
