@@ -29,12 +29,11 @@ import org.sputnikdev.bluetooth.URL;
 import org.sputnikdev.bluetooth.manager.transport.Descriptor;
 
 /**
- *
+ * Bluegiga transport descriptor.
  * @author Vlad Kolotov
  */
 class BluegigaDescriptor implements Descriptor {
 
-    private final Logger logger = LoggerFactory.getLogger(BluegigaDescriptor.class);
     private final URL url;
     private final int connectionHandle;
     private final int descriptorHandle;
@@ -67,6 +66,8 @@ class BluegigaDescriptor implements Descriptor {
     }
 
     @Override
-    public void dispose() { }
+    public void dispose() {
+        // do nothing
+    }
 
 }
