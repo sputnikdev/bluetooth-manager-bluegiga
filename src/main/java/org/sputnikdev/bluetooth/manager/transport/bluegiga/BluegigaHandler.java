@@ -22,6 +22,7 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
 
 import com.zsmartsystems.bluetooth.bluegiga.BlueGigaCommand;
 import com.zsmartsystems.bluetooth.bluegiga.BlueGigaEventListener;
+import com.zsmartsystems.bluetooth.bluegiga.BlueGigaHandlerListener;
 import com.zsmartsystems.bluetooth.bluegiga.BlueGigaResponse;
 import com.zsmartsystems.bluetooth.bluegiga.BlueGigaSerialHandler;
 import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.*;
@@ -85,9 +86,24 @@ class BluegigaHandler implements BlueGigaEventListener {
     // synchronisation objects (used in conversion of async processes to be synchronous)
     private final EventCaptor eventsCaptor = new EventCaptor();
 
-    BluegigaHandler(String portName) {
+    private BluegigaHandler(String portName) {
         this.portName = portName;
-        init();
+    }
+
+    static BluegigaHandler create(String portName) {
+        BluegigaHandler bluegigaHandler = new BluegigaHandler(portName);
+
+        try {
+            bluegigaHandler.init();
+        } catch (Exception ex) {
+            throw new BluegigaException("Could not initialize blugiga handler for port: " + portName, ex);
+        }
+
+        if (!bluegigaHandler.isAlive()) {
+            throw new BluegigaException("Serial port " + portName + " most likely does not represent a "
+                + "Bluegiga compatible device");
+        }
+        return bluegigaHandler;
     }
 
     @Override
@@ -96,7 +112,11 @@ class BluegigaHandler implements BlueGigaEventListener {
     }
 
     String getPortName() {
-        return this.portName;
+        return portName;
+    }
+
+    void addHandlerListener(BlueGigaHandlerListener listener) {
+        bgHandler.addHandlerListener(listener);
     }
 
     void addEventListener(BlueGigaEventListener listener) {
@@ -104,7 +124,7 @@ class BluegigaHandler implements BlueGigaEventListener {
     }
 
     void removeEventListener(BlueGigaEventListener listener) {
-        this.bgHandler.removeEventListener(listener);
+        bgHandler.removeEventListener(listener);
     }
 
     boolean isAlive() {
@@ -210,7 +230,7 @@ class BluegigaHandler implements BlueGigaEventListener {
     }
 
     void dispose() {
-        if (bgHandler != null) {
+        if (bgHandler != null && bgHandler.isAlive()) {
             bgStopProcedure();
             closeAllConnections();
             bgHandler.close();
@@ -454,7 +474,6 @@ class BluegigaHandler implements BlueGigaEventListener {
     }
 
     private void init() {
-
         if (bgHandler != null) {
             dispose();
         }
@@ -474,7 +493,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         // Not doing this will cause connection failures later
         bgSetMode(GapConnectableMode.GAP_NON_CONNECTABLE, GapDiscoverableMode.GAP_NON_DISCOVERABLE);
 
-        this.adapterAddress = bgGetAdapterAddress();
+        adapterAddress = bgGetAdapterAddress();
 
         bgHandler.addEventListener(this);
     }

@@ -55,7 +55,7 @@ public class BluegigaAdapter implements Adapter, BlueGigaEventListener {
 
     private final Map<URL, BluegigaDevice> devices = new HashMap<>();
 
-    private Notification<Boolean> discoverinNotification;
+    private Notification<Boolean> discoveringNotification;
 
     BluegigaAdapter(BluegigaHandler bluegigaHandler) {
         bgHandler = bluegigaHandler;
@@ -83,12 +83,12 @@ public class BluegigaAdapter implements Adapter, BlueGigaEventListener {
 
     @Override
     public void enableDiscoveringNotifications(Notification<Boolean> notification) {
-        discoverinNotification = notification;
+        discoveringNotification = notification;
     }
 
     @Override
     public void disableDiscoveringNotifications() {
-        discoverinNotification = null;
+        discoveringNotification = null;
     }
 
     @Override
@@ -190,7 +190,7 @@ public class BluegigaAdapter implements Adapter, BlueGigaEventListener {
     }
 
     private void notifyDiscovering(boolean isDiscovering) {
-        Notification<Boolean> notification = discoverinNotification;
+        Notification<Boolean> notification = discoveringNotification;
         if (notification != null) {
             try {
                 notification.notify(isDiscovering);

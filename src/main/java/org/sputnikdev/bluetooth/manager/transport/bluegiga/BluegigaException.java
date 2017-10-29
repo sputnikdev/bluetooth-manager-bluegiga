@@ -21,7 +21,7 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
  */
 
 /**
- *
+ * A generic Bluegiga exception.
  * @author Vlad Kolotov
  */
 public class BluegigaException extends RuntimeException {

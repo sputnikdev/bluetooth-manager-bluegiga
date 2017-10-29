@@ -20,7 +20,7 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
  * #L%
  */
 
-import gnu.io.CommPortIdentifier;
+import com.zsmartsystems.bluetooth.bluegiga.BlueGigaHandlerListener;
 import gnu.io.NRSerialPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,13 +32,13 @@ import org.sputnikdev.bluetooth.manager.transport.BluetoothObjectFactory;
 import org.sputnikdev.bluetooth.manager.transport.Characteristic;
 import org.sputnikdev.bluetooth.manager.transport.Device;
 
-import java.util.Collections;
-import java.util.Enumeration;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -46,7 +46,7 @@ import java.util.stream.Collectors;
  *
  * @author Vlad Kolotov
  */
-public class BluegigaFactory implements BluetoothObjectFactory {
+public class BluegigaFactory implements BluetoothObjectFactory, BlueGigaHandlerListener {
 
     public static final String BLUEGIGA_PROTOCOL_NAME = "bluegiga";
     private static final String LINUX_PORT_NAMES_REGEX =
@@ -58,14 +58,15 @@ public class BluegigaFactory implements BluetoothObjectFactory {
 
     private Logger logger = LoggerFactory.getLogger(BluegigaFactory.class);
 
-    private final Map<URL, BluegigaAdapter> adapters = new HashMap<>();
+    private final Set<String> ports = new CopyOnWriteArraySet<>();
+    private final Map<URL, BluegigaAdapter> adapters = new ConcurrentHashMap<>();
+    private boolean autodiscovery;
 
     /**
      * Constructs Bluegiga factory based on automatically discovered ports.
      */
     public BluegigaFactory() {
-        adapters.putAll(discover().stream().collect(
-            Collectors.toMap(BluegigaAdapter::getURL, Function.identity())));
+        autodiscovery = true;
     }
 
     /**
@@ -76,9 +77,9 @@ public class BluegigaFactory implements BluetoothObjectFactory {
      * Windows: COM1
      * @param portNames list of serial port names
      */
-    public BluegigaFactory(List<String> portNames) {
-        adapters.putAll(discover(portNames).stream().collect(
-                Collectors.toMap(BluegigaAdapter::getURL, Function.identity())));
+    public BluegigaFactory(Set<String> portNames) {
+        autodiscovery = false;
+        ports.addAll(portNames);
     }
 
     @Override
@@ -90,7 +91,7 @@ public class BluegigaFactory implements BluetoothObjectFactory {
                     return bluegigaAdapter;
                 } else {
                     bluegigaAdapter.dispose();
-                    return getAdapter(bluegigaAdapter.getPortName());
+                    return tryToCreateAdapter(bluegigaAdapter.getPortName());
                 }
             }
         }
@@ -112,6 +113,10 @@ public class BluegigaFactory implements BluetoothObjectFactory {
     @Override
     public List<DiscoveredAdapter> getDiscoveredAdapters() {
         synchronized (adapters) {
+            if (autodiscovery) {
+                discoverPorts();
+            }
+            discoverAdapters();
             return adapters.values().stream().map(BluegigaFactory::convert).collect(Collectors.toList());
         }
     }
@@ -129,19 +134,31 @@ public class BluegigaFactory implements BluetoothObjectFactory {
         return BLUEGIGA_PROTOCOL_NAME;
     }
 
-    private List<BluegigaAdapter> discover() {
-        return NRSerialPort.getAvailableSerialPorts()
-            .stream()
-            .map(this::getAdapter).filter(Objects::nonNull).collect(Collectors.toList());
+    @Override
+    public void bluegigaClosed(Exception reason) {
+        logger.warn("Blueguga handler was closed due to the reason:", reason);
     }
 
-    private List<BluegigaAdapter> discover(List<String> portNames) {
-        return Collections.list((Enumeration<CommPortIdentifier>) CommPortIdentifier.getPortIdentifiers())
-                .stream()
-                .filter(p -> !p.isCurrentlyOwned())
-                .map(CommPortIdentifier::getName)
-                .filter(portNames::contains)
-                .map(this::getAdapter).filter(Objects::nonNull).collect(Collectors.toList());
+    private void discoverPorts() {
+        try {
+            synchronized (ports) {
+                ports.addAll(NRSerialPort.getAvailableSerialPorts().stream()
+                    .filter(port -> !ports.contains(port)).collect(Collectors.toSet()));
+            }
+        } catch (Exception ex) {
+            logger.warn("Could not autodiscover BlueGiga serial ports.", ex);
+        }
+    }
+
+    private void discoverAdapters() {
+        synchronized (adapters) {
+            Set<String> usedPorts = adapters.values().stream().map(BluegigaAdapter::getPortName)
+                .collect(Collectors.toSet());
+            Set<String> newPorts = ports.stream().filter(p -> !usedPorts.contains(p)).collect(Collectors.toSet());
+
+            adapters.putAll(newPorts.stream().map(this::tryToCreateAdapter).filter(Objects::nonNull)
+                .collect(Collectors.toMap(BluegigaAdapter::getURL, Function.identity())));
+        }
     }
 
     private static DiscoveredAdapter convert(Adapter bluegigaAdapter) {
@@ -156,16 +173,35 @@ public class BluegigaFactory implements BluetoothObjectFactory {
                 bluegigaDevice.isBleEnabled());
     }
 
-    private BluegigaAdapter getAdapter(String portName) {
-        BluegigaAdapter bluegigaAdapter = new BluegigaAdapter(new BluegigaHandler(portName));
-        if (bluegigaAdapter.isAlive()) {
-            return bluegigaAdapter;
-        } else {
-            // this is not a BG compatible device
-            logger.info("Serial port {} does not represent a Bluegiga compatible device", portName);
-            bluegigaAdapter.dispose();
+    private BluegigaAdapter tryToCreateAdapter(String portName) {
+        try {
+            return createAdapter(portName);
+        } catch (Exception ex) {
+            logger.warn("Could not create adapter for port: " + portName, ex);
         }
+        return null;
+    }
+
+    private BluegigaAdapter createAdapter(String portName) {
+        BluegigaHandler bluegigaHandler = BluegigaHandler.create(portName);
+        BluegigaAdapter bluegigaAdapter = new BluegigaAdapter(bluegigaHandler);
+        URL adapterURL = bluegigaAdapter.getURL();
+        bluegigaHandler.addHandlerListener(exception -> {
+            synchronized (adapters) {
+                bluegigaAdapter.dispose();
+                adapters.remove(adapterURL);
+            }
+        });
         return bluegigaAdapter;
+    }
+
+    private BluegigaHandler createHandler(String portName) {
+        try {
+            return BluegigaHandler.create(portName);
+        } catch (Exception ex) {
+            logger.warn("Could not create a Bluegiga handler for port: " + portName, ex);
+        }
+        return null;
     }
 
 }
