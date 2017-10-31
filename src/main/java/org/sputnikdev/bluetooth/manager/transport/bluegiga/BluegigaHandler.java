@@ -20,11 +20,7 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
  * #L%
  */
 
-import com.zsmartsystems.bluetooth.bluegiga.BlueGigaCommand;
-import com.zsmartsystems.bluetooth.bluegiga.BlueGigaEventListener;
-import com.zsmartsystems.bluetooth.bluegiga.BlueGigaHandlerListener;
-import com.zsmartsystems.bluetooth.bluegiga.BlueGigaResponse;
-import com.zsmartsystems.bluetooth.bluegiga.BlueGigaSerialHandler;
+import com.zsmartsystems.bluetooth.bluegiga.*;
 import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.*;
 import com.zsmartsystems.bluetooth.bluegiga.command.connection.*;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.*;
@@ -44,6 +40,7 @@ import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -128,7 +125,7 @@ class BluegigaHandler implements BlueGigaEventListener {
     }
 
     boolean isAlive() {
-        return this.bgHandler.isAlive();
+        return bgHandler.isAlive();
     }
 
     URL getAdapterAddress() {
@@ -190,7 +187,16 @@ class BluegigaHandler implements BlueGigaEventListener {
     }
 
     BlueGigaGetInfoResponse bgGetInfo() {
-        return (BlueGigaGetInfoResponse) bgHandler.sendTransaction(new BlueGigaGetInfoCommand());
+        return (BlueGigaGetInfoResponse) sendTransaction(new BlueGigaGetInfoCommand());
+    }
+    
+    private BlueGigaResponse sendTransaction(BlueGigaCommand command) {
+        try {
+            return bgHandler.sendTransaction(command, 10000);
+        } catch (Exception e) {
+            closeBGHandler();
+            throw new BlueGigaException("Fatal error in communication with BlueGiga adapter.", e);
+        }
     }
 
     /**
@@ -202,11 +208,11 @@ class BluegigaHandler implements BlueGigaEventListener {
             scanCommand.setActiveScanning(true);
             scanCommand.setScanInterval(ACTIVE_SCAN_INTERVAL);
             scanCommand.setScanWindow(ACTIVE_SCAN_WINDOW);
-            bgHandler.sendTransaction(scanCommand);
+            sendTransaction(scanCommand);
 
             BlueGigaDiscoverCommand discoverCommand = new BlueGigaDiscoverCommand();
             discoverCommand.setMode(GapDiscoverMode.GAP_DISCOVER_OBSERVATION);
-            BlueGigaDiscoverResponse response = (BlueGigaDiscoverResponse) bgHandler.sendTransaction(discoverCommand);
+            BlueGigaDiscoverResponse response = (BlueGigaDiscoverResponse) sendTransaction(discoverCommand);
             discovering = response.getResult() == BgApiResponse.SUCCESS;
             return discovering;
         }
@@ -216,14 +222,14 @@ class BluegigaHandler implements BlueGigaEventListener {
         synchronized (eventsCaptor) {
             BlueGigaGetRssiCommand rssiCommand = new BlueGigaGetRssiCommand();
             rssiCommand.setConnection(connectionHandle);
-            return (short) ((BlueGigaGetRssiResponse) bgHandler.sendTransaction(rssiCommand)).getRssi();
+            return (short) ((BlueGigaGetRssiResponse) sendTransaction(rssiCommand)).getRssi();
         }
     }
 
     boolean bgStopProcedure() {
         synchronized (eventsCaptor) {
             BlueGigaCommand command = new BlueGigaEndProcedureCommand();
-            BlueGigaEndProcedureResponse response = (BlueGigaEndProcedureResponse) bgHandler.sendTransaction(command);
+            BlueGigaEndProcedureResponse response = (BlueGigaEndProcedureResponse) sendTransaction(command);
             discovering = false;
             return response.getResult() == BgApiResponse.SUCCESS;
         }
@@ -231,12 +237,23 @@ class BluegigaHandler implements BlueGigaEventListener {
 
     void dispose() {
         if (bgHandler != null && bgHandler.isAlive()) {
-            bgStopProcedure();
-            closeAllConnections();
-            bgHandler.close();
-            bgHandler = null;
+            try {
+                bgStopProcedure();
+                closeAllConnections();
+            } catch (Exception ex) {
+                logger.warn("Could not stop discovery or close all connections.");
+            }
         }
 
+        closeBGHandler();
+
+        this.adapterAddress = null;
+    }
+
+    private void closeBGHandler() {
+        if (bgHandler != null && bgHandler.isAlive()) {
+            bgHandler.close();
+        }
         try {
             if (inputStream != null) {
                 inputStream.close();
@@ -255,8 +272,6 @@ class BluegigaHandler implements BlueGigaEventListener {
             serialPort.close();
             serialPort = null;
         }
-
-        this.adapterAddress = null;
     }
 
     // Bluegiga API specific methods
@@ -364,7 +379,7 @@ class BluegigaHandler implements BlueGigaEventListener {
     private BgApiResponse bgDisconnect(int connectionHandle) {
         BlueGigaDisconnectCommand command = new BlueGigaDisconnectCommand();
         command.setConnection(connectionHandle);
-        return ((BlueGigaDisconnectResponse) bgHandler.sendTransaction(command)).getResult();
+        return ((BlueGigaDisconnectResponse) sendTransaction(command)).getResult();
     }
 
     /*
@@ -374,7 +389,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         BlueGigaSetModeCommand command = new BlueGigaSetModeCommand();
         command.setConnect(connectableMode);
         command.setDiscover(discoverableMode);
-        BlueGigaSetModeResponse response = (BlueGigaSetModeResponse) bgHandler.sendTransaction(command);
+        BlueGigaSetModeResponse response = (BlueGigaSetModeResponse) sendTransaction(command);
 
         return response.getResult() == BgApiResponse.SUCCESS;
     }
@@ -391,7 +406,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         command.setStart(1);
         command.setEnd(65535);
         command.setUuid(UUID.fromString("00002800-0000-0000-0000-000000000000"));
-        BlueGigaReadByGroupTypeResponse response = (BlueGigaReadByGroupTypeResponse) bgHandler.sendTransaction(command);
+        BlueGigaReadByGroupTypeResponse response = (BlueGigaReadByGroupTypeResponse) sendTransaction(command);
         return response.getResult();
     }
 
@@ -406,7 +421,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         command.setConnection(connectionHandle);
         command.setStart(1);
         command.setEnd(65535);
-        BlueGigaFindInformationResponse response = (BlueGigaFindInformationResponse) bgHandler.sendTransaction(command);
+        BlueGigaFindInformationResponse response = (BlueGigaFindInformationResponse) sendTransaction(command);
         return response.getResult();
     }
 
@@ -417,7 +432,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         command.setStart(1);
         command.setEnd(65535);
         command.setUuid(UUID.fromString("00002803-0000-0000-0000-000000000000"));
-        BlueGigaReadByTypeResponse response = (BlueGigaReadByTypeResponse) bgHandler.sendTransaction(command);
+        BlueGigaReadByTypeResponse response = (BlueGigaReadByTypeResponse) sendTransaction(command);
         return response.getResult();
     }
 
@@ -433,7 +448,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         BlueGigaReadByHandleCommand command = new BlueGigaReadByHandleCommand();
         command.setConnection(connectionHandle);
         command.setChrHandle(characteristicHandle);
-        BlueGigaReadByHandleResponse response = (BlueGigaReadByHandleResponse) bgHandler.sendTransaction(command);
+        BlueGigaReadByHandleResponse response = (BlueGigaReadByHandleResponse) sendTransaction(command);
 
         return response.getResult();
     }
@@ -452,7 +467,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         command.setConnection(connectionHandle);
         command.setAttHandle(handle);
         command.setData(value);
-        BlueGigaAttributeWriteResponse response = (BlueGigaAttributeWriteResponse) bgHandler.sendTransaction(command);
+        BlueGigaAttributeWriteResponse response = (BlueGigaAttributeWriteResponse) sendTransaction(command);
 
         return response.getResult();
     }
