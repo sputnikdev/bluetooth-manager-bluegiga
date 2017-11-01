@@ -156,7 +156,13 @@ public class BluegigaFactory implements BluetoothObjectFactory, BlueGigaHandlerL
             Set<String> usedPorts = adapters.values().stream().map(BluegigaAdapter::getPortName)
                 .collect(Collectors.toSet());
 
-            // dospose lost adapters
+            /*
+            Unfortunately RXTX driver works in different way in Linux, i.e. when a port gets opened, then it disappears
+            from the list of available ports (NRSerialPort.getAvailableSerialPorts()), so we cannot use that
+            to detect/remove stale adapters.
+            */
+            // dispose lost adapters
+            /*
             Set<String> lostPorts = usedPorts.stream().filter(p -> !discoveredPorts.contains(p))
                 .collect(Collectors.toSet());
             adapters.entrySet().removeIf(entry -> {
@@ -166,6 +172,7 @@ public class BluegigaFactory implements BluetoothObjectFactory, BlueGigaHandlerL
                 }
                 return false;
             });
+            */
 
             // new ports
             Map<URL, BluegigaAdapter> newAdapters = discoveredPorts.stream().filter(p -> !usedPorts.contains(p))
