@@ -38,14 +38,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.function.Function;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- *
+ * A Bluetooth Manager Transport abstraction layer implementation based on BlugGiga library.
  * @author Vlad Kolotov
  */
 public class BluegigaFactory implements BluetoothObjectFactory, BlueGigaHandlerListener {
@@ -53,14 +51,13 @@ public class BluegigaFactory implements BluetoothObjectFactory, BlueGigaHandlerL
     public static final String BLUEGIGA_PROTOCOL_NAME = "bluegiga";
     public static final String LINUX_PORT_NAMES_REGEX =
             "((/dev/ttyS|/dev/ttyUSB|/dev/ttyACM|/dev/ttyAMA|/dev/rfcomm)[0-9]{1,3})";
-    public static final String OSX_PORT_NAMES_REGEX = "(tty.(serial|usbserial|usbmodem).*)";
+    public static final String OSX_PORT_NAMES_REGEX = "(/dev/tty.(serial|usbserial|usbmodem).*)";
     public static final String WINDOWS_PORT_NAMES_REGEX = "((COM)[0-9]{1,3})";
     public static final String PORT_NAMES_REGEX =
             LINUX_PORT_NAMES_REGEX + "|" + OSX_PORT_NAMES_REGEX + "|" + WINDOWS_PORT_NAMES_REGEX;
 
     private Logger logger = LoggerFactory.getLogger(BluegigaFactory.class);
 
-    //private final Set<String> ports = new CopyOnWriteArraySet<>();
     private final Pattern regexPortPattern;
     private final Map<URL, BluegigaAdapter> adapters = new ConcurrentHashMap<>();
 
@@ -117,23 +114,9 @@ public class BluegigaFactory implements BluetoothObjectFactory, BlueGigaHandlerL
     @Override
     public List<DiscoveredAdapter> getDiscoveredAdapters() {
         synchronized (adapters) {
-            if (autodiscovery) {
-                discoverPorts();
-            }
             discoverAdapters();
-            checkAdaptersAlive();
             return adapters.values().stream().map(BluegigaFactory::convert).collect(Collectors.toList());
         }
-    }
-
-    private void checkAdaptersAlive() {
-        adapters.forEach((url, bluegigaAdapter) -> {
-            if (!bluegigaAdapter.isAlive()) {
-                bluegigaAdapter.dispose();
-                adapters.remove(url);
-                ports.remove(bluegigaAdapter.getPortName());
-            }
-        });
     }
 
     private boolean checkIfPortExists(String portName) {
@@ -164,37 +147,54 @@ public class BluegigaFactory implements BluetoothObjectFactory, BlueGigaHandlerL
         logger.warn("Blueguga handler was closed due to the reason:", reason);
     }
 
-    private void discoverPorts() {
-        try {
-            synchronized (ports) {
-                ports.addAll(NRSerialPort.getAvailableSerialPorts().stream()
-                    .filter(port -> !ports.contains(port)).collect(Collectors.toSet()));
-            }
-        } catch (Exception ex) {
-            logger.warn("Could not autodiscover BlueGiga serial ports.", ex);
+    private void discoverAdapters() {
+        synchronized (adapters) {
+            Set<String> discoveredPorts = NRSerialPort.getAvailableSerialPorts().stream()
+                .filter(p -> regexPortPattern.matcher(p).find())
+                .collect(Collectors.toSet());
+
+            Set<String> usedPorts = adapters.values().stream().map(BluegigaAdapter::getPortName)
+                .collect(Collectors.toSet());
+
+            // dospose lost adapters
+            Set<String> lostPorts = usedPorts.stream().filter(p -> !discoveredPorts.contains(p))
+                .collect(Collectors.toSet());
+            adapters.entrySet().removeIf(entry -> {
+                if (lostPorts.contains(entry.getValue().getPortName())) {
+                    entry.getValue().dispose();
+                    return true;
+                }
+                return false;
+            });
+
+            // new ports
+            Map<URL, BluegigaAdapter> newAdapters = discoveredPorts.stream().filter(p -> !usedPorts.contains(p))
+                .map(this::tryToCreateAdapter).filter(Objects::nonNull)
+                .collect(Collectors.toMap(BluegigaAdapter::getURL, Function.identity()));
+            // clean up stale objects
+            newAdapters.forEach((key, adapter) -> {
+                if (adapters.containsKey(key)) {
+                    removeAdapter(adapters.get(key));
+                }
+            });
+            adapters.putAll(newAdapters);
+
+            // check if adapters still alive
+            adapters.forEach((url, bluegigaAdapter) -> {
+                if (!bluegigaAdapter.isAlive()) {
+                    removeAdapter(bluegigaAdapter);
+                }
+            });
         }
     }
 
-    private void discoverAdapters() {
-        synchronized (adapters) {
-            Set<String> usedPorts = adapters.values().stream().map(BluegigaAdapter::getPortName)
-                .collect(Collectors.toSet());
-            Set<String> newPorts = ports.stream().filter(p -> !usedPorts.contains(p)).collect(Collectors.toSet());
-
-            Map<URL, BluegigaAdapter> newAdapters = newPorts.stream().map(this::tryToCreateAdapter).filter(Objects::nonNull)
-                    .collect(Collectors.toMap(BluegigaAdapter::getURL, Function.identity()));
-
-            newAdapters.forEach((key, adapter) -> {
-                if (adapters.containsKey(key)) {
-                    BluegigaAdapter adapterToRemove = adapters.get(key);
-                    adapters.remove(key);
-                    ports.remove(adapterToRemove.getPortName());
-                    adapterToRemove.dispose();
-                }
-            });
-
-            adapters.putAll(newAdapters);
+    private void removeAdapter(BluegigaAdapter bluegigaAdapter) {
+        try {
+            bluegigaAdapter.dispose();
+        } catch (Exception ex) {
+            logger.warn("Could not dispose adapter: " + bluegigaAdapter.getPortName(), ex);
         }
+        adapters.remove(bluegigaAdapter.getURL());
     }
 
     private static DiscoveredAdapter convert(Adapter bluegigaAdapter) {
@@ -221,12 +221,9 @@ public class BluegigaFactory implements BluetoothObjectFactory, BlueGigaHandlerL
     private BluegigaAdapter createAdapter(String portName) {
         BluegigaHandler bluegigaHandler = BluegigaHandler.create(portName);
         BluegigaAdapter bluegigaAdapter = new BluegigaAdapter(bluegigaHandler);
-        URL adapterURL = bluegigaAdapter.getURL();
         bluegigaHandler.addHandlerListener(exception -> {
             synchronized (adapters) {
-                bluegigaAdapter.dispose();
-                adapters.remove(adapterURL);
-                ports.remove(portName);
+                removeAdapter(bluegigaAdapter);
             }
         });
         return bluegigaAdapter;

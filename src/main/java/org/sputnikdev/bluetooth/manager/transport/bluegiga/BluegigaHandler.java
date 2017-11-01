@@ -241,13 +241,11 @@ class BluegigaHandler implements BlueGigaEventListener {
                 bgStopProcedure();
                 closeAllConnections();
             } catch (Exception ex) {
-                logger.warn("Could not stop discovery or close all connections.");
+                logger.warn("Could not stop discovery or close all connections.", ex);
             }
         }
 
         closeBGHandler();
-
-        this.adapterAddress = null;
     }
 
     private void closeBGHandler() {
