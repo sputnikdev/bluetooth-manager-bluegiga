@@ -40,6 +40,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -49,37 +51,37 @@ import java.util.stream.Collectors;
 public class BluegigaFactory implements BluetoothObjectFactory, BlueGigaHandlerListener {
 
     public static final String BLUEGIGA_PROTOCOL_NAME = "bluegiga";
-    private static final String LINUX_PORT_NAMES_REGEX =
+    public static final String LINUX_PORT_NAMES_REGEX =
             "((/dev/ttyS|/dev/ttyUSB|/dev/ttyACM|/dev/ttyAMA|/dev/rfcomm)[0-9]{1,3})";
-    private static final String OSX_PORT_NAMES_REGEX = "(tty.(serial|usbserial|usbmodem).*)";
-    private static final String WINDOWS_PORT_NAMES_REGEX = "((COM)[0-9]{1,3})";
-    private static final String PORT_NAMES_REGEX =
+    public static final String OSX_PORT_NAMES_REGEX = "(tty.(serial|usbserial|usbmodem).*)";
+    public static final String WINDOWS_PORT_NAMES_REGEX = "((COM)[0-9]{1,3})";
+    public static final String PORT_NAMES_REGEX =
             LINUX_PORT_NAMES_REGEX + "|" + OSX_PORT_NAMES_REGEX + "|" + WINDOWS_PORT_NAMES_REGEX;
 
     private Logger logger = LoggerFactory.getLogger(BluegigaFactory.class);
 
-    private final Set<String> ports = new CopyOnWriteArraySet<>();
+    //private final Set<String> ports = new CopyOnWriteArraySet<>();
+    private final Pattern regexPortPattern;
     private final Map<URL, BluegigaAdapter> adapters = new ConcurrentHashMap<>();
-    private boolean autodiscovery;
 
     /**
-     * Constructs Bluegiga factory based on automatically discovered ports.
+     * Constructs Bluegiga factory based on a broad regex pattern to match serial ports:
+     * BluegigaFactory.PORT_NAMES_REGEX
      */
     public BluegigaFactory() {
-        autodiscovery = true;
+        regexPortPattern = Pattern.compile(PORT_NAMES_REGEX);
     }
 
     /**
-     * Constructs Bluegiga factory based on a list of serial port names.
+     * Constructs Bluegiga factory based on a regular expression to match serial port names.
      * Examples of port names:
      * OSX: /dev/tty.usbmodem1
      * Linux: /dev/ttyACM1
      * Windows: COM1
-     * @param portNames list of serial port names
+     * @param portNamesRegexPattern regular expression for serial port matching
      */
-    public BluegigaFactory(Set<String> portNames) {
-        autodiscovery = false;
-        ports.addAll(portNames);
+    public BluegigaFactory(String portNamesRegexPattern) {
+        regexPortPattern = Pattern.compile(portNamesRegexPattern);
     }
 
     @Override
@@ -91,7 +93,7 @@ public class BluegigaFactory implements BluetoothObjectFactory, BlueGigaHandlerL
                     return bluegigaAdapter;
                 } else {
                     bluegigaAdapter.dispose();
-                    if (ports.contains(bluegigaAdapter.getPortName())) {
+                    if (checkIfPortExists(bluegigaAdapter.getPortName())) {
                         return tryToCreateAdapter(bluegigaAdapter.getPortName());
                     }
                 }
@@ -132,6 +134,15 @@ public class BluegigaFactory implements BluetoothObjectFactory, BlueGigaHandlerL
                 ports.remove(bluegigaAdapter.getPortName());
             }
         });
+    }
+
+    private boolean checkIfPortExists(String portName) {
+        try {
+            return NRSerialPort.getAvailableSerialPorts().contains(portName);
+        } catch (Exception ex) {
+            logger.warn("Could not autodiscover BlueGiga serial ports.", ex);
+            return false;
+        }
     }
 
     @Override
