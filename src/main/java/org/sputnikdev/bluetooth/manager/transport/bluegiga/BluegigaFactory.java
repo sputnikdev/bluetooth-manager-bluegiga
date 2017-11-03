@@ -20,7 +20,6 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
  * #L%
  */
 
-import com.zsmartsystems.bluetooth.bluegiga.BlueGigaHandlerListener;
 import gnu.io.NRSerialPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,7 +45,7 @@ import java.util.stream.Collectors;
  * A Bluetooth Manager Transport abstraction layer implementation based on BlugGiga library.
  * @author Vlad Kolotov
  */
-public class BluegigaFactory implements BluetoothObjectFactory, BlueGigaHandlerListener {
+public class BluegigaFactory implements BluetoothObjectFactory {
 
     public static final String BLUEGIGA_PROTOCOL_NAME = "bluegiga";
     public static final String LINUX_PORT_NAMES_REGEX =
@@ -83,15 +82,21 @@ public class BluegigaFactory implements BluetoothObjectFactory, BlueGigaHandlerL
 
     @Override
     public BluegigaAdapter getAdapter(URL url) {
+        URL adapterURL = url.getAdapterURL();
         synchronized (adapters) {
-            if (adapters.containsKey(url.getAdapterURL())) {
-                BluegigaAdapter bluegigaAdapter = adapters.get(url.getAdapterURL());
+            if (adapters.containsKey(adapterURL)) {
+                BluegigaAdapter bluegigaAdapter = adapters.get(adapterURL);
                 if (bluegigaAdapter.isAlive()) {
                     return bluegigaAdapter;
                 } else {
+                    adapters.remove(adapterURL);
                     bluegigaAdapter.dispose();
                     if (checkIfPortExists(bluegigaAdapter.getPortName())) {
-                        return tryToCreateAdapter(bluegigaAdapter.getPortName());
+                        bluegigaAdapter = tryToCreateAdapter(bluegigaAdapter.getPortName());
+                        if (bluegigaAdapter != null) {
+                            adapters.put(adapterURL, bluegigaAdapter);
+                        }
+                        return bluegigaAdapter;
                     }
                 }
             }
@@ -101,14 +106,15 @@ public class BluegigaFactory implements BluetoothObjectFactory, BlueGigaHandlerL
 
     @Override
     public BluegigaDevice getDevice(URL url) {
-        return Optional.ofNullable(getAdapter(url)).map(adapter -> adapter.getDevice(url)).orElse(null);
+        return Optional.ofNullable(getAdapter(url.getAdapterURL()))
+            .map(adapter -> adapter.getDevice(url.getDeviceURL())).orElse(null);
     }
 
     @Override
     public Characteristic getCharacteristic(URL url) {
-        return Optional.ofNullable(getDevice(url))
-                .map(device -> device.getService(url))
-                .map(service -> service.getCharacteristic(url)).orElse(null);
+        return Optional.ofNullable(getDevice(url.getDeviceURL()))
+                .map(device -> device.getService(url.getServiceURL()))
+                .map(service -> service.getCharacteristic(url.getCharacteristicURL())).orElse(null);
     }
 
     @Override
@@ -123,7 +129,7 @@ public class BluegigaFactory implements BluetoothObjectFactory, BlueGigaHandlerL
         try {
             return NRSerialPort.getAvailableSerialPorts().contains(portName);
         } catch (Exception ex) {
-            logger.warn("Could not autodiscover BlueGiga serial ports.", ex);
+            logger.warn("Could not verify if port exists.", ex);
             return false;
         }
     }
@@ -142,15 +148,10 @@ public class BluegigaFactory implements BluetoothObjectFactory, BlueGigaHandlerL
         return BLUEGIGA_PROTOCOL_NAME;
     }
 
-    @Override
-    public void bluegigaClosed(Exception reason) {
-        logger.warn("Blueguga handler was closed due to the reason:", reason);
-    }
-
-    private void discoverAdapters() {
+    void discoverAdapters() {
         synchronized (adapters) {
             Set<String> discoveredPorts = NRSerialPort.getAvailableSerialPorts().stream()
-                .filter(p -> regexPortPattern.matcher(p).find())
+                .filter(this::matchPort)
                 .collect(Collectors.toSet());
 
             Set<String> usedPorts = adapters.values().stream().map(BluegigaAdapter::getPortName)
@@ -195,6 +196,10 @@ public class BluegigaFactory implements BluetoothObjectFactory, BlueGigaHandlerL
         }
     }
 
+    boolean matchPort(String port) {
+        return regexPortPattern.matcher(port).find();
+    }
+
     private void removeAdapter(BluegigaAdapter bluegigaAdapter) {
         try {
             bluegigaAdapter.dispose();
@@ -220,20 +225,26 @@ public class BluegigaFactory implements BluetoothObjectFactory, BlueGigaHandlerL
         try {
             return createAdapter(portName);
         } catch (Exception ex) {
-            logger.warn("Could not create adapter for port: " + portName, ex);
+            logger.warn("Could not create adapter handler for port: " + portName, ex);
         }
         return null;
     }
 
-    private BluegigaAdapter createAdapter(String portName) {
+    BluegigaAdapter createAdapter(String portName) {
         BluegigaHandler bluegigaHandler = BluegigaHandler.create(portName);
-        BluegigaAdapter bluegigaAdapter = new BluegigaAdapter(bluegigaHandler);
-        bluegigaHandler.addHandlerListener(exception -> {
-            synchronized (adapters) {
-                removeAdapter(bluegigaAdapter);
-            }
-        });
-        return bluegigaAdapter;
+        try {
+            BluegigaAdapter bluegigaAdapter = BluegigaAdapter.create(bluegigaHandler);
+            bluegigaHandler.addHandlerListener(exception -> {
+                synchronized (adapters) {
+                    removeAdapter(bluegigaAdapter);
+                }
+            });
+            return bluegigaAdapter;
+        } catch (Exception ex) {
+            bluegigaHandler.dispose();
+            logger.warn("Could not create adapter for port: " + portName, ex);
+            return null;
+        }
     }
 
 }

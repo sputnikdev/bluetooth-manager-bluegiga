@@ -72,7 +72,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     private Instant lastDiscovered;
     private int bluetoothClass;
     private boolean bleEnabled;
-    private boolean serviceResolved;
+    private boolean servicesResolved;
     private final Map<URL, BluegigaService> services = new HashMap<>();
 
     // Notifications/listeners
@@ -110,14 +110,16 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public boolean disconnect() {
-        if (isConnected()) {
+        if (connectionHandle >= 0) {
             servicesUnresolved();
             notifyConnected(false);
-            bgHandler.disconnect(connectionHandle);
-            connectionHandle = -1;
-            return true;
+            try {
+                bgHandler.disconnect(connectionHandle);
+            } finally {
+                connectionHandle = -1;
+            }
         }
-        return false;
+        return true;
     }
 
     @Override
@@ -172,7 +174,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public boolean isServicesResolved() {
-        return this.serviceResolved;
+        return this.servicesResolved;
     }
 
     @Override
@@ -198,7 +200,9 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     }
 
     @Override
-    public void dispose() { }
+    public void dispose() {
+        disconnect();
+    }
 
     @Override
     public void bluegigaEventReceived(BlueGigaResponse event) {
@@ -319,16 +323,18 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     }
 
     private void servicesUnresolved() {
-        synchronized (services) {
-            services.clear();
+        if (servicesResolved) {
+            synchronized (services) {
+                services.clear();
+            }
+            notifyServicesResolved(false);
+            servicesResolved = false;
         }
-        notifyServicesResolved(false);
-        serviceResolved = false;
     }
 
     private void serviceResolved() {
         notifyServicesResolved(true);
-        serviceResolved = true;
+        servicesResolved = true;
     }
 
     private void notifyRSSIChanged(short rssi) {

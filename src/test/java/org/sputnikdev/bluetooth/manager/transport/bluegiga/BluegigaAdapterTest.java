@@ -59,7 +59,7 @@ public class BluegigaAdapterTest {
 
         when(bluegigaHandler.bgGetInfo()).thenReturn(info);
 
-        bluegigaAdapter = new BluegigaAdapter(bluegigaHandler);
+        bluegigaAdapter = BluegigaAdapter.create(bluegigaHandler);
 
 
         verify(bluegigaHandler).bgGetInfo();
@@ -116,14 +116,9 @@ public class BluegigaAdapterTest {
         verify(bluegigaHandler, times(2)).bgStartScanning();
 
         bluegigaAdapter.stopDiscovery();
-        verify(discoveringNotification, never()).notify(false);
-        assertTrue(bluegigaAdapter.isDiscovering());
-        verify(bluegigaHandler).bgStopProcedure();
-
-        bluegigaAdapter.stopDiscovery();
         verify(discoveringNotification).notify(false);
         assertFalse(bluegigaAdapter.isDiscovering());
-        verify(bluegigaHandler, times(2)).bgStopProcedure();
+        verify(bluegigaHandler).bgStopProcedure();
 
         bluegigaAdapter.disableDiscoveringNotifications();
         bluegigaAdapter.startDiscovery();
@@ -132,9 +127,9 @@ public class BluegigaAdapterTest {
 
         bluegigaAdapter.stopDiscovery();
         assertFalse(bluegigaAdapter.isDiscovering());
-        verify(bluegigaHandler, times(3)).bgStopProcedure();
+        verify(bluegigaHandler, times(2)).bgStopProcedure();
 
-        verifyNoMoreInteractions(discoveringNotification, bluegigaHandler);
+        verifyNoMoreInteractions(discoveringNotification);
     }
 
     @Test

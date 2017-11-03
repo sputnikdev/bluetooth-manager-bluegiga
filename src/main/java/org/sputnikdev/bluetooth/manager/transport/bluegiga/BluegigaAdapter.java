@@ -42,13 +42,13 @@ import java.util.Optional;
  * @author Vlad Kolotov
  * @author Chris Jackson
  */
-public class BluegigaAdapter implements Adapter, BlueGigaEventListener {
+class BluegigaAdapter implements Adapter, BlueGigaEventListener {
 
     public static final String BLUEGIGA_NAME = "Bluegiga";
 
     private final Logger logger = LoggerFactory.getLogger(BluegigaAdapter.class);
 
-    private final BlueGigaGetInfoResponse info;
+    private BlueGigaGetInfoResponse info;
     private boolean discovering;
 
     private final BluegigaHandler bgHandler;
@@ -57,8 +57,17 @@ public class BluegigaAdapter implements Adapter, BlueGigaEventListener {
 
     private Notification<Boolean> discoveringNotification;
 
-    BluegigaAdapter(BluegigaHandler bluegigaHandler) {
+    private BluegigaAdapter(BluegigaHandler bluegigaHandler) {
         bgHandler = bluegigaHandler;
+    }
+
+    static BluegigaAdapter create(BluegigaHandler bluegigaHandler) {
+        BluegigaAdapter bluegigaAdapter = new BluegigaAdapter(bluegigaHandler);
+        bluegigaAdapter.init();
+        return bluegigaAdapter;
+    }
+
+    private void init() {
         info = bgHandler.bgGetInfo();
         bgHandler.addEventListener(this);
     }
@@ -103,12 +112,14 @@ public class BluegigaAdapter implements Adapter, BlueGigaEventListener {
 
     @Override
     public boolean stopDiscovery() {
-        boolean discoveryStatus = bgHandler.bgStopProcedure();
-        if (discovering && discoveryStatus) {
+        if (discovering) {
             discovering = false;
             notifyDiscovering(false);
+            if (bgHandler.isAlive()) {
+                bgHandler.bgStopProcedure();
+            }
         }
-        return discoveryStatus;
+        return true;
     }
 
     @Override
@@ -124,7 +135,24 @@ public class BluegigaAdapter implements Adapter, BlueGigaEventListener {
     @Override
     public void dispose() {
         bgHandler.removeEventListener(this);
-        devices.clear();
+
+        try {
+            stopDiscovery();
+        } catch (Exception ex) {
+            logger.warn("Could not stop discovery process", ex);
+        }
+
+        synchronized (devices) {
+            devices.values().forEach(device -> {
+                try {
+                    device.dispose();
+                } catch (Exception ex) {
+                    logger.warn("Could not dispose Bluegiga device", ex);
+                }
+            });
+            devices.clear();
+        }
+
         bgHandler.dispose();
     }
 
