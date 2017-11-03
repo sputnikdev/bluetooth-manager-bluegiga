@@ -183,9 +183,16 @@ public class BluegigaAdapterTest {
 
     @Test
     public void testDispose() throws Exception {
+        URL deviceURL = ADAPTER_URL.copyWithDevice("11:22:33:44:55:66");
+        BluegigaDevice device = mock(BluegigaDevice.class);
+        when(device.getURL()).thenReturn(deviceURL);
+        doReturn(device).when(bluegigaAdapter).createDevice(deviceURL);
+        bluegigaAdapter.bluegigaEventReceived(mockDevice(deviceURL.getDeviceAddress()));
         bluegigaAdapter.dispose();
         verify(bluegigaHandler).removeEventListener(bluegigaAdapter);
         verify(bluegigaHandler).dispose();
+        verify(bluegigaAdapter).stopDiscovery();
+        verify(device).dispose();
     }
 
     @Test

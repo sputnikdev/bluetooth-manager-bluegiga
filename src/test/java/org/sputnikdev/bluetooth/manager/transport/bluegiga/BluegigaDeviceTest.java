@@ -301,13 +301,15 @@ public class BluegigaDeviceTest {
     }
 
     @Test
-    public void getURL() throws Exception {
+    public void testGetURL() throws Exception {
         assertEquals(DEVICE_URL, bluegigaDevice.getURL());
     }
 
     @Test
-    public void dispose() throws Exception {
-        // do nothing
+    public void testDispose() throws Exception {
+        bluegigaDevice.connect();
+        bluegigaDevice.dispose();
+        verify(bluegigaDevice).disconnect();
     }
 
     @Test
