@@ -20,13 +20,56 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
  * #L%
  */
 
-import com.zsmartsystems.bluetooth.bluegiga.*;
-import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.*;
-import com.zsmartsystems.bluetooth.bluegiga.command.connection.*;
-import com.zsmartsystems.bluetooth.bluegiga.command.gap.*;
-import com.zsmartsystems.bluetooth.bluegiga.command.system.*;
-import com.zsmartsystems.bluetooth.bluegiga.enumeration.*;
-import gnu.io.*;
+import com.zsmartsystems.bluetooth.bluegiga.BlueGigaCommand;
+import com.zsmartsystems.bluetooth.bluegiga.BlueGigaEventListener;
+import com.zsmartsystems.bluetooth.bluegiga.BlueGigaException;
+import com.zsmartsystems.bluetooth.bluegiga.BlueGigaHandlerListener;
+import com.zsmartsystems.bluetooth.bluegiga.BlueGigaResponse;
+import com.zsmartsystems.bluetooth.bluegiga.BlueGigaSerialHandler;
+import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaAttributeValueEvent;
+import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaAttributeWriteCommand;
+import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaAttributeWriteResponse;
+import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaFindInformationCommand;
+import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaFindInformationFoundEvent;
+import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaFindInformationResponse;
+import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaGroupFoundEvent;
+import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaProcedureCompletedEvent;
+import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaReadByGroupTypeCommand;
+import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaReadByGroupTypeResponse;
+import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaReadByHandleCommand;
+import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaReadByHandleResponse;
+import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaReadByTypeCommand;
+import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaReadByTypeResponse;
+import com.zsmartsystems.bluetooth.bluegiga.command.connection.BlueGigaConnectionStatusEvent;
+import com.zsmartsystems.bluetooth.bluegiga.command.connection.BlueGigaDisconnectCommand;
+import com.zsmartsystems.bluetooth.bluegiga.command.connection.BlueGigaDisconnectResponse;
+import com.zsmartsystems.bluetooth.bluegiga.command.connection.BlueGigaDisconnectedEvent;
+import com.zsmartsystems.bluetooth.bluegiga.command.connection.BlueGigaGetRssiCommand;
+import com.zsmartsystems.bluetooth.bluegiga.command.connection.BlueGigaGetRssiResponse;
+import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaConnectDirectCommand;
+import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaConnectDirectResponse;
+import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaDiscoverCommand;
+import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaDiscoverResponse;
+import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaEndProcedureCommand;
+import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaEndProcedureResponse;
+import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaSetModeCommand;
+import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaSetModeResponse;
+import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaSetScanParametersCommand;
+import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaAddressGetCommand;
+import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaAddressGetResponse;
+import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetConnectionsCommand;
+import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetConnectionsResponse;
+import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetInfoCommand;
+import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetInfoResponse;
+import com.zsmartsystems.bluetooth.bluegiga.enumeration.BgApiResponse;
+import com.zsmartsystems.bluetooth.bluegiga.enumeration.BluetoothAddressType;
+import com.zsmartsystems.bluetooth.bluegiga.enumeration.GapConnectableMode;
+import com.zsmartsystems.bluetooth.bluegiga.enumeration.GapDiscoverMode;
+import com.zsmartsystems.bluetooth.bluegiga.enumeration.GapDiscoverableMode;
+import gnu.io.NRSerialPort;
+import gnu.io.NativeResourceException;
+import gnu.io.SerialPort;
+import gnu.io.UnsupportedCommOperationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.sputnikdev.bluetooth.URL;
@@ -37,10 +80,8 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -53,7 +94,7 @@ class BluegigaHandler implements BlueGigaEventListener {
      * This value (milliseconds) is used in conversion of an async process to be synchronous.
      * //TODO refine and come up with a proper value
      */
-    private static final int WAIT_EVENT_TIMEOUT = 10000;
+    static final long WAIT_EVENT_TIMEOUT = 10000;
 
     private final Logger logger = LoggerFactory.getLogger(BluegigaAdapter.class);
 
@@ -83,7 +124,7 @@ class BluegigaHandler implements BlueGigaEventListener {
     // synchronisation objects (used in conversion of async processes to be synchronous)
     private final EventCaptor eventsCaptor = new EventCaptor();
 
-    private BluegigaHandler(String portName) {
+    BluegigaHandler(String portName) {
         this.portName = portName;
     }
 
@@ -105,7 +146,7 @@ class BluegigaHandler implements BlueGigaEventListener {
 
     @Override
     public void bluegigaEventReceived(BlueGigaResponse event) {
-        this.eventsCaptor.handleEvent(event);
+        eventsCaptor.handleEvent(event);
     }
 
     String getPortName() {
@@ -117,7 +158,7 @@ class BluegigaHandler implements BlueGigaEventListener {
     }
 
     void addEventListener(BlueGigaEventListener listener) {
-        this.bgHandler.addEventListener(listener);
+        bgHandler.addEventListener(listener);
     }
 
     void removeEventListener(BlueGigaEventListener listener) {
@@ -135,12 +176,13 @@ class BluegigaHandler implements BlueGigaEventListener {
     BlueGigaConnectionStatusEvent connect(URL url) {
         // a workaround for a BGAPI bug when adapter becomes unstable when discovery is enabled within
         // an attempt to connect to a device
-        if (discovering) {
+        boolean wasDiscovering = discovering;
+        if (wasDiscovering) {
             bgStopProcedure();
         }
         BlueGigaConnectionStatusEvent result = syncCall(BlueGigaConnectionStatusEvent.class,
-            p -> p.getAddress().equals(url.getDeviceAddress()), () -> bgConnect(url));
-        if (discovering) {
+            statusEvent -> statusEvent.getAddress().equals(url.getDeviceAddress()), () -> bgConnect(url));
+        if (wasDiscovering) {
             bgStartScanning();
         }
         return result;
@@ -148,32 +190,32 @@ class BluegigaHandler implements BlueGigaEventListener {
 
     BlueGigaDisconnectedEvent disconnect(int connectionHandle) {
         return syncCall(BlueGigaDisconnectedEvent.class, p -> p.getConnection() == connectionHandle,
-                () -> bgDisconnect(connectionHandle));
+            () -> bgDisconnect(connectionHandle));
     }
 
     List<BlueGigaGroupFoundEvent> getServices(int connectionHandle) {
         return syncCallProcedure(BlueGigaGroupFoundEvent.class, a -> a.getConnection() == connectionHandle,
                 BlueGigaProcedureCompletedEvent.class, p -> p.getConnection() == connectionHandle,
-                () -> bgFindPrimaryServices(connectionHandle));
+            () -> bgFindPrimaryServices(connectionHandle));
     }
 
 
     List<BlueGigaFindInformationFoundEvent> getCharacteristics(int connectionHandle) {
         return syncCallProcedure(BlueGigaFindInformationFoundEvent.class, p -> p.getConnection() == connectionHandle,
                 BlueGigaProcedureCompletedEvent.class, p -> p.getConnection() == connectionHandle,
-                () -> bgFindCharacteristics(connectionHandle));
+            () -> bgFindCharacteristics(connectionHandle));
     }
 
     List<BlueGigaAttributeValueEvent> getDeclarations(int connectionHandle) {
         return syncCallProcedure(BlueGigaAttributeValueEvent.class, p -> p.getConnection() == connectionHandle,
                 BlueGigaProcedureCompletedEvent.class, p -> p.getConnection() == connectionHandle,
-                () -> bgFindDeclarations(connectionHandle));
+            () -> bgFindDeclarations(connectionHandle));
     }
 
     BlueGigaAttributeValueEvent readCharacteristic(int connectionHandle, int characteristicHandle) {
         return syncCall(BlueGigaAttributeValueEvent.class,
-                (p) -> p.getConnection() == connectionHandle && p.getAttHandle() == characteristicHandle,
-                () -> bgReadCharacteristic(connectionHandle, characteristicHandle));
+            p -> p.getConnection() == connectionHandle && p.getAttHandle() == characteristicHandle,
+            () -> bgReadCharacteristic(connectionHandle, characteristicHandle));
     }
 
     BlueGigaProcedureCompletedEvent writeCharacteristic(int connectionHandle, int characteristicHandle, int[] data) {
@@ -192,7 +234,7 @@ class BluegigaHandler implements BlueGigaEventListener {
     
     private BlueGigaResponse sendTransaction(BlueGigaCommand command) {
         try {
-            return bgHandler.sendTransaction(command, 10000);
+            return bgHandler.sendTransaction(command, WAIT_EVENT_TIMEOUT);
         } catch (Exception e) {
             closeBGHandler();
             throw new BlueGigaException("Fatal error in communication with BlueGiga adapter.", e);
@@ -228,8 +270,8 @@ class BluegigaHandler implements BlueGigaEventListener {
 
     boolean bgStopProcedure() {
         synchronized (eventsCaptor) {
-            BlueGigaCommand command = new BlueGigaEndProcedureCommand();
-            BlueGigaEndProcedureResponse response = (BlueGigaEndProcedureResponse) sendTransaction(command);
+            BlueGigaEndProcedureResponse response = (BlueGigaEndProcedureResponse)
+                sendTransaction(new BlueGigaEndProcedureCommand());
             discovering = false;
             return response.getResult() == BgApiResponse.SUCCESS;
         }
@@ -282,12 +324,11 @@ class BluegigaHandler implements BlueGigaEventListener {
             BgApiResponse response = initialCommand.get();
             if (response == BgApiResponse.SUCCESS) {
                 try {
-                    BlueGigaResponse event = (BlueGigaResponse)
-                            eventsCaptor.getEvents().poll(WAIT_EVENT_TIMEOUT, TimeUnit.MILLISECONDS);
+                    BlueGigaResponse event = eventsCaptor.poll();
                     if (event == null) {
                         throw new BluegigaException("Could not receive expected event");
                     }
-                    if (eventsCaptor.isCompleted()) {
+                    if (eventsCaptor.isCompletionEvent(event)) {
                         eventsCaptor.reset();
                         return (T) event;
                     } else {
@@ -316,12 +357,11 @@ class BluegigaHandler implements BlueGigaEventListener {
                     List<E> events = new ArrayList<>();
                     BlueGigaResponse event;
                     while (true) {
-                        event = (BlueGigaResponse) eventsCaptor.getEvents().poll(
-                                WAIT_EVENT_TIMEOUT, TimeUnit.MILLISECONDS);
+                        event = eventsCaptor.poll();
                         if (event == null) {
                             throw new BluegigaException("Could not receive expected event");
                         }
-                        if (eventsCaptor.isCompleted()) {
+                        if (eventsCaptor.isCompletionEvent(event)) {
                             eventsCaptor.reset();
                             return events;
                         } else {
@@ -335,6 +375,10 @@ class BluegigaHandler implements BlueGigaEventListener {
             throw new BluegigaException("Could not initiate process: " + response);
         }
     }
+
+    /*
+     * The following methods are private methods for handling the BlueGiga protocol
+     */
 
     private URL bgGetAdapterAddress() {
         BlueGigaAddressGetResponse addressResponse = (BlueGigaAddressGetResponse) bgHandler
@@ -363,8 +407,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         connect.setConnIntervalMax(connIntervalMax);
         connect.setLatency(latency);
         connect.setTimeout(timeout);
-        BlueGigaConnectDirectResponse connectResponse = (BlueGigaConnectDirectResponse) bgHandler
-                .sendTransaction(connect);
+        BlueGigaConnectDirectResponse connectResponse = (BlueGigaConnectDirectResponse) sendTransaction(connect);
         return connectResponse.getResult();
     }
 
@@ -380,9 +423,6 @@ class BluegigaHandler implements BlueGigaEventListener {
         return ((BlueGigaDisconnectResponse) sendTransaction(command)).getResult();
     }
 
-    /*
-     * The following methods are private methods for handling the BlueGiga protocol
-     */
     private boolean bgSetMode(GapConnectableMode connectableMode, GapDiscoverableMode discoverableMode) {
         BlueGigaSetModeCommand command = new BlueGigaSetModeCommand();
         command.setConnect(connectableMode);
@@ -474,8 +514,7 @@ class BluegigaHandler implements BlueGigaEventListener {
 
         int maxConnections = 0;
         BlueGigaCommand command = new BlueGigaGetConnectionsCommand();
-        BlueGigaGetConnectionsResponse connectionsResponse = (BlueGigaGetConnectionsResponse) bgHandler
-                .sendTransaction(command);
+        BlueGigaGetConnectionsResponse connectionsResponse = (BlueGigaGetConnectionsResponse) sendTransaction(command);
         if (connectionsResponse != null) {
             maxConnections = connectionsResponse.getMaxconn();
         }
@@ -486,7 +525,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         }
     }
 
-    private void init() {
+    void init() {
         if (bgHandler != null) {
             dispose();
         }
@@ -511,7 +550,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         bgHandler.addEventListener(this);
     }
 
-    private void openSerialPort(final String serialPortName, int baudRate) {
+    void openSerialPort(final String serialPortName, int baudRate) {
         logger.info("Connecting to serial port [{}]", serialPortName);
         try {
             NRSerialPort nrSerialPort = new NRSerialPort(serialPortName, baudRate);
@@ -549,14 +588,13 @@ class BluegigaHandler implements BlueGigaEventListener {
         }
     }
 
-    private class EventCaptor<A extends BlueGigaResponse, C extends BlueGigaResponse> {
+    private static class EventCaptor<A extends BlueGigaResponse, C extends BlueGigaResponse> {
 
         private Class<A> aggregatedEventType;
         private Class<C> completedEventType;
         private Predicate<A> aggregationPredicate;
         private Predicate<C> completionPredicate;
-        private BlockingQueue<BlueGigaResponse> events = new LinkedBlockingDeque<>();
-        private boolean completed;
+        private LinkedBlockingDeque<BlueGigaResponse> events = new LinkedBlockingDeque<>();
 
         void setAggregatedEventType(Class<A> aggregatedEventType) {
             this.aggregatedEventType = aggregatedEventType;
@@ -574,32 +612,32 @@ class BluegigaHandler implements BlueGigaEventListener {
             this.completionPredicate = completionPredicate;
         }
 
-        BlockingQueue<BlueGigaResponse> getEvents() {
-            return events;
-        }
-
-        boolean isCompleted() {
-            return completed;
+        BlueGigaResponse poll() throws InterruptedException {
+            return events.poll(WAIT_EVENT_TIMEOUT, TimeUnit.MILLISECONDS);
         }
 
         void handleEvent(BlueGigaResponse event) {
-            if (completedEventType != null && completedEventType.isInstance(event) &&
-                    completionPredicate.test((C) event)) {
-                events.add(event);
-                completed = true;
-            } else if (aggregatedEventType != null && aggregatedEventType.isInstance(event) &&
-                    aggregationPredicate.test((A) event)) {
+            if (isAggregatedEvent(event) || isCompletionEvent(event)) {
                 events.add(event);
             }
         }
 
         void reset() {
-            this.aggregatedEventType = null;
-            this.completedEventType = null;
-            this.aggregationPredicate = null;
-            this.completionPredicate = null;
-            this.completed = false;
-            this.events.clear();
+            aggregatedEventType = null;
+            completedEventType = null;
+            aggregationPredicate = null;
+            completionPredicate = null;
+            events.clear();
+        }
+
+        boolean isCompletionEvent(BlueGigaResponse event) {
+            return completedEventType != null && completedEventType.isInstance(event)
+                && completionPredicate.test((C) event);
+        }
+
+        boolean isAggregatedEvent(BlueGigaResponse event) {
+            return aggregatedEventType != null && aggregatedEventType.isInstance(event)
+                && aggregationPredicate.test((A) event);
         }
 
     }
