@@ -29,10 +29,12 @@ import org.slf4j.LoggerFactory;
 import org.sputnikdev.bluetooth.URL;
 import org.sputnikdev.bluetooth.manager.transport.Characteristic;
 import org.sputnikdev.bluetooth.manager.transport.CharacteristicAccessType;
-import org.sputnikdev.bluetooth.manager.transport.Descriptor;
 import org.sputnikdev.bluetooth.manager.transport.Notification;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -54,7 +56,8 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
     private Notification<byte[]> valueNotification;
     private final Map<URL, BluegigaDescriptor> descriptors = new HashMap<>();
 
-    BluegigaCharacteristic(BluegigaHandler bgHandler, URL url, int connectionHandle, int characteristicHandle) {
+    protected BluegigaCharacteristic(BluegigaHandler bgHandler, URL url,
+                                     int connectionHandle, int characteristicHandle) {
         this.bgHandler = bgHandler;
         this.url = url;
         this.connectionHandle = connectionHandle;
@@ -67,9 +70,7 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
         return flags;
     }
 
-    void setFlags(Set<CharacteristicAccessType> flags) {
-        this.flags = flags;
-    }
+
 
     @Override
     public boolean isNotifying() {
@@ -118,11 +119,7 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
     }
 
     @Override
-    public void dispose() { }
-
-    int getCharacteristicHandle() {
-        return characteristicHandle;
-    }
+    public void dispose() { /* do nothing */ }
 
     @Override
     public void bluegigaEventReceived(BlueGigaResponse event) {
@@ -140,19 +137,27 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
         }
     }
 
-    void addDescriptor(BluegigaDescriptor descriptor) {
+    protected void setFlags(Set<CharacteristicAccessType> flags) {
+        this.flags = flags;
+    }
+
+    protected int getCharacteristicHandle() {
+        return characteristicHandle;
+    }
+
+    protected void addDescriptor(BluegigaDescriptor descriptor) {
         synchronized (descriptors) {
             descriptors.put(descriptor.getURL(), descriptor);
         }
     }
 
-    Set<BluegigaDescriptor> getDescriptors() {
+    protected Set<BluegigaDescriptor> getDescriptors() {
         synchronized (descriptors) {
             return new HashSet<>(descriptors.values());
         }
     }
 
-    void toggleNotification(boolean enabled) {
+    protected void toggleNotification(boolean enabled) {
         if (!(flags.contains(CharacteristicAccessType.NOTIFY) || flags.contains(CharacteristicAccessType.INDICATE))) {
             logger.error("The characteristic {} does not support neither notifications nor indications", url);
             throw new BluegigaException("The characteristic " + url

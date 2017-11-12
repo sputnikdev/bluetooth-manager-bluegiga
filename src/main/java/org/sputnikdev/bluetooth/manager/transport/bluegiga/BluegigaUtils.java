@@ -35,13 +35,13 @@ final class BluegigaUtils {
 
     private BluegigaUtils() { }
 
-    static void dispose(BluetoothObject object) {
+    public static void dispose(BluetoothObject object) {
         try {
             object.dispose();
-        } catch (Exception ignore) { }
+        } catch (Exception ignore) { /* do nothing */ }
     }
 
-    static byte[] fromInts(int[] data) {
+    public static byte[] fromInts(int[] data) {
         byte[] bytes = new byte[data.length];
         for (int i = 0; i < data.length; i++) {
             bytes[i] = (byte) data[i];
@@ -49,7 +49,7 @@ final class BluegigaUtils {
         return bytes;
     }
 
-    static int[] fromBytes(byte[] data) {
+    public static int[] fromBytes(byte[] data) {
         int[] bytes = new int[data.length];
         for (int i = 0; i < data.length; i++) {
             bytes[i] = data[i];
@@ -63,7 +63,7 @@ final class BluegigaUtils {
      * @param buffer some data represents UUID in blugiga format
      * @return UUID
      */
-    static UUID deserializeUUID(int[] buffer) {
+    public static UUID deserializeUUID(int[] buffer) {
         long low;
         long high;
         int position = 0;
@@ -95,6 +95,5 @@ final class BluegigaUtils {
         }
         return new UUID(high, low);
     }
-
 
 }

@@ -568,33 +568,33 @@ class BluegigaHandler implements BlueGigaEventListener {
         private Predicate<C> completionPredicate;
         private LinkedBlockingDeque<BlueGigaResponse> events = new LinkedBlockingDeque<>();
 
-        void setAggregatedEventType(Class<A> aggregatedEventType) {
+        private void setAggregatedEventType(Class<A> aggregatedEventType) {
             this.aggregatedEventType = aggregatedEventType;
         }
 
-        void setCompletedEventType(Class<C> completedEventType) {
+        private void setCompletedEventType(Class<C> completedEventType) {
             this.completedEventType = completedEventType;
         }
 
-        void setAggregationPredicate(Predicate<A> aggregationPredicate) {
+        private void setAggregationPredicate(Predicate<A> aggregationPredicate) {
             this.aggregationPredicate = aggregationPredicate;
         }
 
-        void setCompletionPredicate(Predicate<C> completionPredicate) {
+        private void setCompletionPredicate(Predicate<C> completionPredicate) {
             this.completionPredicate = completionPredicate;
         }
 
-        BlueGigaResponse poll() throws InterruptedException {
+        private BlueGigaResponse poll() throws InterruptedException {
             return events.poll(WAIT_EVENT_TIMEOUT, TimeUnit.MILLISECONDS);
         }
 
-        void handleEvent(BlueGigaResponse event) {
+        private void handleEvent(BlueGigaResponse event) {
             if (isAggregatedEvent(event) || isCompletionEvent(event)) {
                 events.add(event);
             }
         }
 
-        void reset() {
+        private void reset() {
             aggregatedEventType = null;
             completedEventType = null;
             aggregationPredicate = null;
@@ -602,12 +602,12 @@ class BluegigaHandler implements BlueGigaEventListener {
             events.clear();
         }
 
-        boolean isCompletionEvent(BlueGigaResponse event) {
+        private boolean isCompletionEvent(BlueGigaResponse event) {
             return completedEventType != null && completedEventType.isInstance(event)
                 && completionPredicate.test((C) event);
         }
 
-        boolean isAggregatedEvent(BlueGigaResponse event) {
+        private boolean isAggregatedEvent(BlueGigaResponse event) {
             return aggregatedEventType != null && aggregatedEventType.isInstance(event)
                 && aggregationPredicate.test((A) event);
         }
