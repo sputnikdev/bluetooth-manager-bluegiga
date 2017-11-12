@@ -23,8 +23,6 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
 import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaAttributeValueEvent;
 import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaProcedureCompletedEvent;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BgApiResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.sputnikdev.bluetooth.URL;
 import org.sputnikdev.bluetooth.manager.transport.Descriptor;
 

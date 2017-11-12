@@ -124,11 +124,16 @@ class BluegigaHandler implements BlueGigaEventListener {
     // synchronisation objects (used in conversion of async processes to be synchronous)
     private final EventCaptor eventsCaptor = new EventCaptor();
 
-    BluegigaHandler(String portName) {
+    protected BluegigaHandler(String portName) {
         this.portName = portName;
     }
 
-    static BluegigaHandler create(String portName) {
+    @Override
+    public void bluegigaEventReceived(BlueGigaResponse event) {
+        eventsCaptor.handleEvent(event);
+    }
+
+    protected static BluegigaHandler create(String portName) {
         BluegigaHandler bluegigaHandler = new BluegigaHandler(portName);
 
         try {
@@ -144,36 +149,31 @@ class BluegigaHandler implements BlueGigaEventListener {
         return bluegigaHandler;
     }
 
-    @Override
-    public void bluegigaEventReceived(BlueGigaResponse event) {
-        eventsCaptor.handleEvent(event);
-    }
-
-    String getPortName() {
+    protected String getPortName() {
         return portName;
     }
 
-    void addHandlerListener(BlueGigaHandlerListener listener) {
+    protected void addHandlerListener(BlueGigaHandlerListener listener) {
         bgHandler.addHandlerListener(listener);
     }
 
-    void addEventListener(BlueGigaEventListener listener) {
+    protected void addEventListener(BlueGigaEventListener listener) {
         bgHandler.addEventListener(listener);
     }
 
-    void removeEventListener(BlueGigaEventListener listener) {
+    protected void removeEventListener(BlueGigaEventListener listener) {
         bgHandler.removeEventListener(listener);
     }
 
-    boolean isAlive() {
+    protected boolean isAlive() {
         return bgHandler.isAlive();
     }
 
-    URL getAdapterAddress() {
+    protected URL getAdapterAddress() {
         return adapterAddress;
     }
 
-    BlueGigaConnectionStatusEvent connect(URL url) {
+    protected BlueGigaConnectionStatusEvent connect(URL url) {
         // a workaround for a BGAPI bug when adapter becomes unstable when discovery is enabled within
         // an attempt to connect to a device
         boolean wasDiscovering = discovering;
@@ -188,63 +188,57 @@ class BluegigaHandler implements BlueGigaEventListener {
         return result;
     }
 
-    BlueGigaDisconnectedEvent disconnect(int connectionHandle) {
+    protected BlueGigaDisconnectedEvent disconnect(int connectionHandle) {
         return syncCall(BlueGigaDisconnectedEvent.class, p -> p.getConnection() == connectionHandle,
             () -> bgDisconnect(connectionHandle));
     }
 
-    List<BlueGigaGroupFoundEvent> getServices(int connectionHandle) {
+    protected List<BlueGigaGroupFoundEvent> getServices(int connectionHandle) {
         return syncCallProcedure(BlueGigaGroupFoundEvent.class, a -> a.getConnection() == connectionHandle,
                 BlueGigaProcedureCompletedEvent.class, p -> p.getConnection() == connectionHandle,
             () -> bgFindPrimaryServices(connectionHandle));
     }
 
 
-    List<BlueGigaFindInformationFoundEvent> getCharacteristics(int connectionHandle) {
+    protected List<BlueGigaFindInformationFoundEvent> getCharacteristics(int connectionHandle) {
         return syncCallProcedure(BlueGigaFindInformationFoundEvent.class, p -> p.getConnection() == connectionHandle,
                 BlueGigaProcedureCompletedEvent.class, p -> p.getConnection() == connectionHandle,
             () -> bgFindCharacteristics(connectionHandle));
     }
 
-    List<BlueGigaAttributeValueEvent> getDeclarations(int connectionHandle) {
+    protected List<BlueGigaAttributeValueEvent> getDeclarations(int connectionHandle) {
         return syncCallProcedure(BlueGigaAttributeValueEvent.class, p -> p.getConnection() == connectionHandle,
                 BlueGigaProcedureCompletedEvent.class, p -> p.getConnection() == connectionHandle,
             () -> bgFindDeclarations(connectionHandle));
     }
 
-    BlueGigaAttributeValueEvent readCharacteristic(int connectionHandle, int characteristicHandle) {
+    protected BlueGigaAttributeValueEvent readCharacteristic(int connectionHandle, int characteristicHandle) {
         return syncCall(BlueGigaAttributeValueEvent.class,
             p -> p.getConnection() == connectionHandle && p.getAttHandle() == characteristicHandle,
             () -> bgReadCharacteristic(connectionHandle, characteristicHandle));
     }
 
-    BlueGigaProcedureCompletedEvent writeCharacteristic(int connectionHandle, int characteristicHandle, int[] data) {
+    protected BlueGigaProcedureCompletedEvent writeCharacteristic(int connectionHandle,
+                                                                  int characteristicHandle, int[] data) {
         return syncCall(BlueGigaProcedureCompletedEvent.class,
-                (p) -> p.getConnection() == connectionHandle && p.getChrHandle() == characteristicHandle,
-                () -> bgWriteCharacteristic(connectionHandle, characteristicHandle, data));
+            p -> p.getConnection() == connectionHandle && p.getChrHandle() == characteristicHandle,
+            () -> bgWriteCharacteristic(connectionHandle, characteristicHandle, data));
     }
 
-    boolean writeCharacteristicWithoutResponse(int connectionHandle, int characteristicHandle, int[] data) {
+    protected boolean writeCharacteristicWithoutResponse(int connectionHandle, int characteristicHandle, int[] data) {
         return bgWriteCharacteristic(connectionHandle, characteristicHandle, data) == BgApiResponse.SUCCESS;
     }
 
-    BlueGigaGetInfoResponse bgGetInfo() {
+    protected BlueGigaGetInfoResponse bgGetInfo() {
         return (BlueGigaGetInfoResponse) sendTransaction(new BlueGigaGetInfoCommand());
     }
     
-    private BlueGigaResponse sendTransaction(BlueGigaCommand command) {
-        try {
-            return bgHandler.sendTransaction(command, WAIT_EVENT_TIMEOUT);
-        } catch (Exception e) {
-            closeBGHandler();
-            throw new BlueGigaException("Fatal error in communication with BlueGiga adapter.", e);
-        }
-    }
+
 
     /**
      * Starts scanning on the dongle.
      */
-    boolean bgStartScanning() {
+    protected boolean bgStartScanning() {
         synchronized (eventsCaptor) {
             BlueGigaSetScanParametersCommand scanCommand = new BlueGigaSetScanParametersCommand();
             scanCommand.setActiveScanning(true);
@@ -260,7 +254,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         }
     }
 
-    short bgGetRssi(int connectionHandle) {
+    protected short bgGetRssi(int connectionHandle) {
         synchronized (eventsCaptor) {
             BlueGigaGetRssiCommand rssiCommand = new BlueGigaGetRssiCommand();
             rssiCommand.setConnection(connectionHandle);
@@ -268,7 +262,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         }
     }
 
-    boolean bgStopProcedure() {
+    protected boolean bgStopProcedure() {
         synchronized (eventsCaptor) {
             BlueGigaEndProcedureResponse response = (BlueGigaEndProcedureResponse)
                 sendTransaction(new BlueGigaEndProcedureCommand());
@@ -277,7 +271,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         }
     }
 
-    void dispose() {
+    protected void dispose() {
         if (bgHandler != null && bgHandler.isAlive()) {
             try {
                 bgStopProcedure();
@@ -288,6 +282,15 @@ class BluegigaHandler implements BlueGigaEventListener {
         }
 
         closeBGHandler();
+    }
+
+    private BlueGigaResponse sendTransaction(BlueGigaCommand command) {
+        try {
+            return bgHandler.sendTransaction(command, WAIT_EVENT_TIMEOUT);
+        } catch (Exception e) {
+            closeBGHandler();
+            throw new BlueGigaException("Fatal error in communication with BlueGiga adapter.", e);
+        }
     }
 
     private void closeBGHandler() {
@@ -411,12 +414,6 @@ class BluegigaHandler implements BlueGigaEventListener {
         return connectResponse.getResult();
     }
 
-    /**
-     * Close a connection using {@link BlueGigaDisconnectCommand}
-     *
-     * @param connectionHandle an ID of connection
-     * @return true if the disconnection process has started
-     */
     private BgApiResponse bgDisconnect(int connectionHandle) {
         BlueGigaDisconnectCommand command = new BlueGigaDisconnectCommand();
         command.setConnection(connectionHandle);
@@ -432,11 +429,6 @@ class BluegigaHandler implements BlueGigaEventListener {
         return response.getResult() == BgApiResponse.SUCCESS;
     }
 
-    /**
-     * Start a read of all primary services using {@link BlueGigaReadByGroupTypeCommand}
-     *
-     * @return true if successful
-     */
     private BgApiResponse bgFindPrimaryServices(int connectionHandle) {
         logger.debug("BlueGiga FindPrimary: connection {}", connectionHandle);
         BlueGigaReadByGroupTypeCommand command = new BlueGigaReadByGroupTypeCommand();
@@ -448,11 +440,6 @@ class BluegigaHandler implements BlueGigaEventListener {
         return response.getResult();
     }
 
-    /**
-     * Start a read of all characteristics using {@link BlueGigaFindInformationCommand}
-     *
-     * @return true if successful
-     */
     private BgApiResponse bgFindCharacteristics(int connectionHandle) {
         logger.debug("BlueGiga Find: connection {}", connectionHandle);
         BlueGigaFindInformationCommand command = new BlueGigaFindInformationCommand();
@@ -474,13 +461,6 @@ class BluegigaHandler implements BlueGigaEventListener {
         return response.getResult();
     }
 
-    /**
-     * Read a characteristic using {@link BlueGigaReadByHandleCommand}
-     *
-     * @param connectionHandle
-     * @param characteristicHandle
-     * @return true if successful
-     */
     private BgApiResponse bgReadCharacteristic(int connectionHandle, int characteristicHandle) {
         logger.debug("BlueGiga Read: connection {}, characteristicHandle {}", connectionHandle, characteristicHandle);
         BlueGigaReadByHandleCommand command = new BlueGigaReadByHandleCommand();
@@ -491,14 +471,6 @@ class BluegigaHandler implements BlueGigaEventListener {
         return response.getResult();
     }
 
-    /**
-     * Write a characteristic using {@link BlueGigaAttributeWriteCommand}
-     *
-     * @param connectionHandle
-     * @param handle
-     * @param value
-     * @return true if successful
-     */
     private BgApiResponse bgWriteCharacteristic(int connectionHandle, int handle, int[] value) {
         logger.debug("BlueGiga Write: connection {}, characteristicHandle {}", connectionHandle, handle);
         BlueGigaAttributeWriteCommand command = new BlueGigaAttributeWriteCommand();
@@ -525,7 +497,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         }
     }
 
-    void init() {
+    private void init() {
         if (bgHandler != null) {
             dispose();
         }
@@ -550,7 +522,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         bgHandler.addEventListener(this);
     }
 
-    void openSerialPort(final String serialPortName, int baudRate) {
+    private void openSerialPort(final String serialPortName, int baudRate) {
         logger.info("Connecting to serial port [{}]", serialPortName);
         try {
             NRSerialPort nrSerialPort = new NRSerialPort(serialPortName, baudRate);

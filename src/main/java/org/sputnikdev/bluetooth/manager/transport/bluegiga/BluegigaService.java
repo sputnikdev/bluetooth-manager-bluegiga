@@ -60,19 +60,19 @@ class BluegigaService implements Service {
     @Override
     public void dispose() { }
 
-    void addCharacteristic(BluegigaCharacteristic characteristic) {
+    protected void addCharacteristic(BluegigaCharacteristic characteristic) {
         synchronized (characteristics) {
             characteristics.put(characteristic.getURL(), characteristic);
         }
     }
 
-    BluegigaCharacteristic getCharacteristic(URL url) {
+    protected BluegigaCharacteristic getCharacteristic(URL url) {
         synchronized (characteristics) {
             return characteristics.get(url.getCharacteristicURL());
         }
     }
 
-    BluegigaCharacteristic findCharacteristicByShortUUID(String shortUUID) {
+    protected BluegigaCharacteristic findCharacteristicByShortUUID(String shortUUID) {
         synchronized (characteristics) {
             return characteristics.values().stream()
                     .filter(characteristic -> match(characteristic, shortUUID))
@@ -80,11 +80,11 @@ class BluegigaService implements Service {
         }
     }
 
-    int getHandleStart() {
+    protected int getHandleStart() {
         return handleStart;
     }
 
-    int getHandleEnd() {
+    protected int getHandleEnd() {
         return handleEnd;
     }
 

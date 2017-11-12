@@ -149,12 +149,12 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public void enableRSSINotifications(Notification<Short> notification) {
-        this.rssiNotification = notification;
+        rssiNotification = notification;
     }
 
     @Override
     public void disableRSSINotifications() {
-        this.rssiNotification = null;
+        rssiNotification = null;
     }
 
     @Override
@@ -231,7 +231,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
         Blocking is not supported by Bluegiga devices
      */
     @Override
-    public void setBlocked(boolean blocked) { }
+    public void setBlocked(boolean blocked) { /* do nothing */ }
 
     @Override
     public boolean isBlocked() {
@@ -239,18 +239,18 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     }
 
     @Override
-    public void enableBlockedNotifications(Notification<Boolean> notification) { }
+    public void enableBlockedNotifications(Notification<Boolean> notification) { /* do nothing */ }
 
     @Override
-    public void disableBlockedNotifications() { }
+    public void disableBlockedNotifications() { /* do nothing */ }
 
-    BluegigaService getService(URL url) {
+    protected BluegigaService getService(URL url) {
         synchronized (services) {
             return services.get(url.getServiceURL());
         }
     }
 
-    void establishConnection() {
+    protected void establishConnection() {
         logger.info("Trying to connect: {}", url);
         BlueGigaConnectionStatusEvent event = bgHandler.connect(url);
         logger.info("Connected: {}", url);
@@ -259,7 +259,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
         notifyConnected(true);
     }
 
-    void discoverServices() {
+    protected void discoverServices() {
         logger.info("Discovering services: {}", url);
         // discover services
         bgHandler.getServices(connectionHandle)
@@ -267,21 +267,21 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
         logger.info("Services discovered: {}", services.size());
     }
 
-    void discoverCharacteristics() {
+    protected void discoverCharacteristics() {
         logger.info("Discovering characteristics: {}", url);
         // discover characteristics and their descriptors
         processAttributes(bgHandler.getCharacteristics(connectionHandle));
         logger.info("Characteristics discovered");
     }
 
-    void discoverDeclarations() {
+    protected void discoverDeclarations() {
         logger.info("Discovering declarations: {}", url);
         // discover characteristic properties (access flags)
         bgHandler.getDeclarations(connectionHandle).forEach(this::processDeclaration);
         logger.info("Declarations discovered: {}", url);
     }
 
-    int getConnectionHandle() {
+    protected int getConnectionHandle() {
         return connectionHandle;
     }
 

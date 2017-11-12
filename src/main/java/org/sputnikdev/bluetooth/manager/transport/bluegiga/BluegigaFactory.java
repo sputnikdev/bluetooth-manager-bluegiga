@@ -125,14 +125,7 @@ public class BluegigaFactory implements BluetoothObjectFactory {
         }
     }
 
-    private boolean checkIfPortExists(String portName) {
-        try {
-            return NRSerialPort.getAvailableSerialPorts().contains(portName);
-        } catch (Exception ex) {
-            logger.warn("Could not verify if port exists.", ex);
-            return false;
-        }
-    }
+
 
     @Override
     public List<DiscoveredDevice> getDiscoveredDevices() {
@@ -148,7 +141,28 @@ public class BluegigaFactory implements BluetoothObjectFactory {
         return BLUEGIGA_PROTOCOL_NAME;
     }
 
-    void discoverAdapters() {
+    protected BluegigaAdapter createAdapter(String portName) {
+        BluegigaHandler bluegigaHandler = BluegigaHandler.create(portName);
+        try {
+            BluegigaAdapter bluegigaAdapter = BluegigaAdapter.create(bluegigaHandler);
+            bluegigaHandler.addHandlerListener(exception -> {
+                synchronized (adapters) {
+                    removeAdapter(bluegigaAdapter);
+                }
+            });
+            return bluegigaAdapter;
+        } catch (Exception ex) {
+            bluegigaHandler.dispose();
+            logger.warn("Could not create adapter for port: " + portName, ex);
+            return null;
+        }
+    }
+
+    protected boolean matchPort(String port) {
+        return regexPortPattern.matcher(port).find();
+    }
+
+    private void discoverAdapters() {
         synchronized (adapters) {
             Set<String> discoveredPorts = NRSerialPort.getAvailableSerialPorts().stream()
                 .filter(this::matchPort)
@@ -196,10 +210,6 @@ public class BluegigaFactory implements BluetoothObjectFactory {
         }
     }
 
-    boolean matchPort(String port) {
-        return regexPortPattern.matcher(port).find();
-    }
-
     private void removeAdapter(BluegigaAdapter bluegigaAdapter) {
         try {
             bluegigaAdapter.dispose();
@@ -230,21 +240,15 @@ public class BluegigaFactory implements BluetoothObjectFactory {
         return null;
     }
 
-    BluegigaAdapter createAdapter(String portName) {
-        BluegigaHandler bluegigaHandler = BluegigaHandler.create(portName);
+    private boolean checkIfPortExists(String portName) {
         try {
-            BluegigaAdapter bluegigaAdapter = BluegigaAdapter.create(bluegigaHandler);
-            bluegigaHandler.addHandlerListener(exception -> {
-                synchronized (adapters) {
-                    removeAdapter(bluegigaAdapter);
-                }
-            });
-            return bluegigaAdapter;
+            return NRSerialPort.getAvailableSerialPorts().contains(portName);
         } catch (Exception ex) {
-            bluegigaHandler.dispose();
-            logger.warn("Could not create adapter for port: " + portName, ex);
-            return null;
+            logger.warn("Could not verify if port exists.", ex);
+            return false;
         }
     }
+
+
 
 }

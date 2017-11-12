@@ -27,11 +27,11 @@ import org.sputnikdev.bluetooth.manager.transport.BluetoothObject;
 import java.util.UUID;
 
 /**
- *
+ * Utility mathods to work with Bluegiga specific logic.
  * @author Vlad Kolotov
  * @author Chris Jackson
  */
-class BluegigaUtils {
+final class BluegigaUtils {
 
     private BluegigaUtils() { }
 
@@ -91,7 +91,6 @@ class BluegigaUtils {
             default:
                 low = 0;
                 high = 0;
-                position += length;
                 break;
         }
         return new UUID(high, low);

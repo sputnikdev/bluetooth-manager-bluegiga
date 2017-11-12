@@ -61,7 +61,7 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
         bgHandler = bluegigaHandler;
     }
 
-    static BluegigaAdapter create(BluegigaHandler bluegigaHandler) {
+    protected static BluegigaAdapter create(BluegigaHandler bluegigaHandler) {
         BluegigaAdapter bluegigaAdapter = new BluegigaAdapter(bluegigaHandler);
         bluegigaAdapter.init();
         return bluegigaAdapter;
@@ -82,7 +82,8 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
 
     @Override
     public String getName() {
-        return BLUEGIGA_NAME + Optional.ofNullable(info).map(i -> " v" + i.getMajor() + "." + i.getMinor()).orElse("");
+        return BLUEGIGA_NAME + Optional.ofNullable(info)
+            .map(inf -> " v" + inf.getMajor() + "." + inf.getMinor()).orElse("");
     }
 
     @Override
@@ -179,7 +180,7 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
      */
 
     @Override
-    public void setPowered(boolean powered) { }
+    public void setPowered(boolean powered) { /* do nothing */ }
 
     @Override
     public boolean isPowered() {
@@ -187,10 +188,10 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
     }
 
     @Override
-    public void enablePoweredNotifications(Notification<Boolean> notification) { }
+    public void enablePoweredNotifications(Notification<Boolean> notification) { /* do nothing */ }
 
     @Override
-    public void disablePoweredNotifications() { }
+    public void disablePoweredNotifications() { /* do nothing */ }
 
     @Override
     public String getAlias() {
@@ -198,7 +199,7 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
     }
 
     @Override
-    public void setAlias(String alias) { }
+    public void setAlias(String alias) { /* do nothing */ }
 
     BluegigaDevice getDevice(URL url) {
         URL deviceURL = url.getDeviceURL();
