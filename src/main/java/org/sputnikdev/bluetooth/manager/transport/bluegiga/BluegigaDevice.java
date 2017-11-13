@@ -35,21 +35,17 @@ import com.zsmartsystems.bluetooth.bluegiga.enumeration.BgApiResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.sputnikdev.bluetooth.URL;
-import org.sputnikdev.bluetooth.manager.transport.Characteristic;
 import org.sputnikdev.bluetooth.manager.transport.CharacteristicAccessType;
 import org.sputnikdev.bluetooth.manager.transport.Device;
 import org.sputnikdev.bluetooth.manager.transport.Notification;
 import org.sputnikdev.bluetooth.manager.transport.Service;
 
-import java.io.UnsupportedEncodingException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Function;
@@ -68,8 +64,6 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     private static final Pattern DEFAULT_UUID_REPLACEMENT =
         Pattern.compile("-0000-0000-0000-000000000000", Pattern.LITERAL);
     private static final String DEFAULT_UUID = "-0000-1000-8000-00805f9b34fb";
-    private static final String GENERIC_SERVICE_UUID = "00001800" + DEFAULT_UUID;
-    private static final String DEVICE_NAME_CHARACTERISTIC_UUID = "00002a00" + DEFAULT_UUID;
 
     private final Logger logger = LoggerFactory.getLogger(BluegigaDevice.class);
     private final URL url;
@@ -221,36 +215,15 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     }
 
     /*
-        Alias can be possible set to a characteristic
+      Aliases are not supported by BlueGiga
      */
     @Override
     public String getAlias() {
-        Characteristic deviceNameCharacteristic = getDeviceNameCharacteristic();
-        if (deviceNameCharacteristic != null) {
-            try {
-                return new String(deviceNameCharacteristic.readValue(), "UTF-8");
-            } catch (UnsupportedEncodingException ex) {
-                logger.error("Could not retrieve alias", ex);
-            }
-        }
         return null;
     }
 
     @Override
-    public void setAlias(String alias) {
-        Characteristic deviceNameCharacteristic = getDeviceNameCharacteristic();
-        if (deviceNameCharacteristic != null) {
-            Set<CharacteristicAccessType> flags = deviceNameCharacteristic.getFlags();
-            if (flags.contains(CharacteristicAccessType.WRITE)
-                || flags.contains(CharacteristicAccessType.WRITE_WITHOUT_RESPONSE)) {
-                try {
-                    deviceNameCharacteristic.writeValue(alias.getBytes("UTF-8"));
-                } catch (UnsupportedEncodingException ex) {
-                    logger.error("Could not set alias", ex);
-                }
-            }
-        }
-    }
+    public void setAlias(String alias) { /* do nothing */}
 
     /*
         Blocking is not supported by Bluegiga devices
@@ -308,15 +281,6 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     protected int getConnectionHandle() {
         return connectionHandle;
-    }
-
-    private Characteristic getDeviceNameCharacteristic() {
-        synchronized (services) {
-            URL deviceNameCharacteristicURL = url.copyWith(GENERIC_SERVICE_UUID, DEVICE_NAME_CHARACTERISTIC_UUID);
-            return Optional.ofNullable(getService(deviceNameCharacteristicURL.getServiceURL()))
-                .map(bluegigaService -> bluegigaService.getCharacteristic(deviceNameCharacteristicURL))
-                .orElse(null);
-        }
     }
 
     private void handleScanEvent(BlueGigaScanResponseEvent scanEvent) {
