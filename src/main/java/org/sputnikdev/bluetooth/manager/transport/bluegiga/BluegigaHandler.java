@@ -543,19 +543,16 @@ class BluegigaHandler implements BlueGigaEventListener {
             logger.info("Serial port [{}] is initialized.", portName);
 
         } catch (NativeResourceException e) {
-            logger.warn("Native resource exception {}; {}", serialPortName, e.toString());
-            throw new BluegigaException(e);
+            throw new BluegigaException(String.format("Native resource exception %s", serialPortName), e);
         } catch (UnsupportedCommOperationException e) {
-            logger.warn("Generic serial port error {}", serialPortName);
-            throw new BluegigaException(e);
+            throw new BluegigaException(String.format("Generic serial port error %s", serialPortName), e);
         }
 
         try {
             inputStream = serialPort.getInputStream();
             outputStream = serialPort.getOutputStream();
         } catch (IOException e) {
-            logger.error("Error getting serial streams", e);
-            throw new BluegigaException(e);
+            throw new BluegigaException("Error getting serial streams", e);
         }
     }
 

@@ -70,8 +70,6 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
         return flags;
     }
 
-
-
     @Override
     public boolean isNotifying() {
         if (flags.contains(CharacteristicAccessType.NOTIFY) || flags.contains(CharacteristicAccessType.INDICATE)) {

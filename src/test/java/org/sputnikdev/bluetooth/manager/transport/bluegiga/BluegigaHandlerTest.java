@@ -367,9 +367,27 @@ public class BluegigaHandlerTest {
     }
 
     @Test(expected = BluegigaException.class)
+    public void testSyncCallInterruptException() throws Exception {
+        mockSyncProcedure(BlueGigaDisconnectCommand.class, BlueGigaDisconnectResponse.class,
+            BgApiResponse.SUCCESS, CONNECTION_HANDLE);
+        Thread current = Thread.currentThread();
+        Executors.newSingleThreadScheduledExecutor().schedule(current::interrupt, 100, TimeUnit.MILLISECONDS);
+        handler.disconnect(CONNECTION_HANDLE);
+    }
+
+    @Test(expected = BluegigaException.class)
     public void testSyncProcedureCallExceptionBadResponse() throws Exception {
         mockSyncProcedure(BlueGigaReadByGroupTypeCommand.class, BlueGigaReadByGroupTypeResponse.class,
             BgApiResponse.UNKNOWN, CONNECTION_HANDLE);
+        handler.getServices(CONNECTION_HANDLE);
+    }
+
+    @Test(expected = BluegigaException.class)
+    public void testSyncProcedureCallInterruptedException() throws Exception {
+        mockSyncProcedure(BlueGigaReadByGroupTypeCommand.class, BlueGigaReadByGroupTypeResponse.class,
+            BgApiResponse.SUCCESS, CONNECTION_HANDLE);
+        Thread current = Thread.currentThread();
+        Executors.newSingleThreadScheduledExecutor().schedule(current::interrupt, 100, TimeUnit.MILLISECONDS);
         handler.getServices(CONNECTION_HANDLE);
     }
 

@@ -34,7 +34,4 @@ public class BluegigaException extends RuntimeException {
         super(message, cause);
     }
 
-    public BluegigaException(Throwable cause) {
-        super(cause);
-    }
 }

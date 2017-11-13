@@ -3,6 +3,7 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
 import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaAttributeValueEvent;
 import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaFindInformationFoundEvent;
 import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaGroupFoundEvent;
+import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaProcedureCompletedEvent;
 import com.zsmartsystems.bluetooth.bluegiga.command.connection.BlueGigaConnectionStatusEvent;
 import com.zsmartsystems.bluetooth.bluegiga.command.connection.BlueGigaDisconnectedEvent;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaScanResponseEvent;
@@ -25,6 +26,7 @@ import org.sputnikdev.bluetooth.manager.transport.Service;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -57,6 +59,8 @@ public class BluegigaDeviceTest {
     private static final int[] EIR_SMARTLOCK_PACKET = {2, 1, 4, 10, 8, 83, 109, 97, 114, 116, 108, 111, 99, 107};
     private static final int[] BATTERY_LEVEL_CHARACTERISTIC_DECLARATION =
         {CharacteristicAccessType.READ.getBitField() | CharacteristicAccessType.NOTIFY.getBitField(), 3, 0, 0x19, 0x2a};
+    private static final int[] DEVICE_NAME_CHARACTERISTIC_DECLARATION =
+        {CharacteristicAccessType.WRITE_WITHOUT_RESPONSE.getBitField(), 3, 0, 0x00, 0x2a};
 
     private static final URL BATTERY_SERVICE_URL = DEVICE_URL.copyWithService("0000180f-0000-1000-8000-00805f9b34fb");
     private static final URL BATTERY_LEVEL_CHARACTERISTIC_URL =
@@ -73,6 +77,9 @@ public class BluegigaDeviceTest {
         TX_POWER_SERVICE_URL.copyWithCharacteristic("00002800-0000-1000-8000-00805f9b34fb");
     private static final URL TX_POWER_CHARACTERISTIC_DESCRIPTOR_URL =
         TX_POWER_SERVICE_URL.copyWithCharacteristic("00002902-0000-1000-8000-00805f9b34fb");
+
+    private static final URL GENERIC_ACCESS_SERVICE_URL = DEVICE_URL.copyWithService("00001800-0000-1000-8000-00805f9b34fb");
+    private static final URL DEVICE_NAME_CHARACTERISTIC_URL = GENERIC_ACCESS_SERVICE_URL.copyWithCharacteristic("00002a00-0000-1000-8000-00805f9b34fb");
 
     @Mock
     private BluegigaHandler bluegigaHandler;
@@ -153,10 +160,6 @@ public class BluegigaDeviceTest {
     }
 
     @Test
-    public void disconnect() throws Exception {
-    }
-
-    @Test
     public void testGetBluetoothClass() throws Exception {
         assertEquals(0, bluegigaDevice.getBluetoothClass());
         int[] eir = {2, EirDataType.EIR_DEVICE_CLASS.getKey(), 10};
@@ -172,10 +175,46 @@ public class BluegigaDeviceTest {
     }
 
     @Test
-    public void testAlias() throws Exception {
-        //TODO use 2a00 characteristic to set/get device alias (if possible at all)
-        bluegigaDevice.setAlias("test");
-        assertNull(bluegigaDevice.getAlias());
+    public void testGetSetAlias() throws Exception {
+        List<BlueGigaGroupFoundEvent> serviceEvents = new ArrayList<>();
+        serviceEvents.add(mockServiceEvent(GENERIC_ACCESS_SERVICE_URL, 1, 10));
+        when(bluegigaHandler.getServices(CONNECTION_HANDLE)).thenReturn(serviceEvents);
+
+        List<BlueGigaFindInformationFoundEvent> characteristicEvents = new ArrayList<>();
+        characteristicEvents.add(mockCharacteristicEvent(DEVICE_NAME_CHARACTERISTIC_URL, 2));
+        when(bluegigaHandler.getCharacteristics(CONNECTION_HANDLE)).thenReturn(characteristicEvents);
+
+        List<BlueGigaAttributeValueEvent> declarations = new ArrayList<>();
+        declarations.add(mockDeclarationEvent(3, DEVICE_NAME_CHARACTERISTIC_DECLARATION));
+        when(bluegigaHandler.getDeclarations(CONNECTION_HANDLE)).thenReturn(declarations);
+
+        BlueGigaConnectionStatusEvent event = mockConnectionStatusEvent();
+        when(bluegigaHandler.connect(DEVICE_URL)).thenReturn(event);
+
+        String alias = "test";
+
+        int[] data = BluegigaUtils.fromBytes(alias.getBytes("UTF-8"));
+
+        BlueGigaProcedureCompletedEvent procedureCompletedEvent = mock(BlueGigaProcedureCompletedEvent.class);
+        when(procedureCompletedEvent.getResult()).thenReturn(BgApiResponse.SUCCESS);
+        when(bluegigaHandler.writeCharacteristic(CONNECTION_HANDLE, 2, data)).thenReturn(procedureCompletedEvent);
+
+        BlueGigaAttributeValueEvent valueEvent = mock(BlueGigaAttributeValueEvent.class);
+        when(valueEvent.getValue()).thenReturn(data);
+        when(bluegigaHandler.readCharacteristic(CONNECTION_HANDLE, 2)).thenReturn(valueEvent);
+
+        bluegigaDevice.connect();
+
+        assertNotNull(bluegigaDevice.getService(GENERIC_ACCESS_SERVICE_URL));
+        assertNotNull(bluegigaDevice.getService(GENERIC_ACCESS_SERVICE_URL).getCharacteristic(DEVICE_NAME_CHARACTERISTIC_URL));
+        assertTrue(bluegigaDevice.getService(GENERIC_ACCESS_SERVICE_URL)
+            .getCharacteristic(DEVICE_NAME_CHARACTERISTIC_URL).getFlags().contains(CharacteristicAccessType.WRITE_WITHOUT_RESPONSE));
+
+        bluegigaDevice.setAlias(alias);
+
+        verify(bluegigaHandler).writeCharacteristicWithoutResponse(CONNECTION_HANDLE, 2, data);
+
+        assertEquals(alias, bluegigaDevice.getAlias());
     }
 
     @Test
@@ -296,11 +335,6 @@ public class BluegigaDeviceTest {
     }
 
     @Test
-    public void testGetServices() throws Exception {
-
-    }
-
-    @Test
     public void testGetURL() throws Exception {
         assertEquals(DEVICE_URL, bluegigaDevice.getURL());
     }
@@ -313,7 +347,7 @@ public class BluegigaDeviceTest {
     }
 
     @Test
-    public void getService() throws Exception {
+    public void testGetService() throws Exception {
         bluegigaDevice.connect();
         assertTrue(bluegigaDevice.isConnected());
         assertNotNull(bluegigaDevice.getService(BATTERY_SERVICE_URL));
@@ -428,7 +462,5 @@ public class BluegigaDeviceTest {
         when(bluegigaHandler.connect(DEVICE_URL)).thenReturn(event);
         return event;
     }
-
-
 
 }
