@@ -20,7 +20,6 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
  * #L%
  */
 
-
 import com.zsmartsystems.bluetooth.bluegiga.BlueGigaResponse;
 import org.sputnikdev.bluetooth.manager.transport.BluetoothObject;
 

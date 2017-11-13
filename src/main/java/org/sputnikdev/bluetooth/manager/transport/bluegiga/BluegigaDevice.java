@@ -60,7 +60,7 @@ import java.util.stream.Collectors;
  */
 class BluegigaDevice implements Device, BlueGigaEventListener {
 
-    static final int DISCOVERY_TIMEOUT = 10;
+    protected static final int DISCOVERY_TIMEOUT = 10;
     private static final Pattern DEFAULT_UUID_REPLACEMENT =
         Pattern.compile("-0000-0000-0000-000000000000", Pattern.LITERAL);
     private static final String DEFAULT_UUID = "-0000-1000-8000-00805f9b34fb";

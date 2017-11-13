@@ -2,6 +2,7 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
 
 import com.zsmartsystems.bluetooth.bluegiga.BlueGigaCommand;
 import com.zsmartsystems.bluetooth.bluegiga.BlueGigaEventListener;
+import com.zsmartsystems.bluetooth.bluegiga.BlueGigaException;
 import com.zsmartsystems.bluetooth.bluegiga.BlueGigaHandlerListener;
 import com.zsmartsystems.bluetooth.bluegiga.BlueGigaResponse;
 import com.zsmartsystems.bluetooth.bluegiga.BlueGigaSerialHandler;
@@ -58,7 +59,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyLong;
-import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isA;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -67,7 +67,6 @@ import static org.powermock.api.mockito.PowerMockito.verifyPrivate;
 import static org.powermock.api.mockito.PowerMockito.when;
 
 @RunWith(PowerMockRunner.class)
-//@PrepareForTest({NRSerialPort.class, BluegigaHandler.class, BluegigaAdapter.class})
 public class BluegigaHandlerTest {
 
     private static final String PORT_NAME = "/dev/tty.usbmodem1";
@@ -164,7 +163,6 @@ public class BluegigaHandlerTest {
 
     @Test
     public void testDisconnect() throws Exception {
-
         BlueGigaConnectionStatusEvent connectionEvent =
             mockConnect(BgApiResponse.SUCCESS, CONNECTION_HANDLE, DEVICE_URL);
         assertEquals(CONNECTION_HANDLE, connectionEvent.getConnection());
@@ -264,7 +262,7 @@ public class BluegigaHandlerTest {
 
         assertTrue(handler.writeCharacteristicWithoutResponse(CONNECTION_HANDLE, CHARACTERISTIC_HANDLE, data));
 
-        when(bgHandler.sendTransaction(isA(BlueGigaAttributeWriteCommand.class), eq(BluegigaHandler.WAIT_EVENT_TIMEOUT)))
+        when(bgHandler.sendTransaction(isA(BlueGigaAttributeWriteCommand.class), anyLong()))
             .thenReturn(writeResponse);
     }
 
@@ -322,7 +320,6 @@ public class BluegigaHandlerTest {
 
     @Test
     public void testDispose() throws Exception {
-
         when(bgHandler.isAlive()).thenReturn(true);
         BlueGigaEndProcedureResponse endProcedureResponse = mock(BlueGigaEndProcedureResponse.class);
         when(endProcedureResponse.getResult()).thenReturn(BgApiResponse.SUCCESS);
@@ -343,13 +340,56 @@ public class BluegigaHandlerTest {
         verify(bgHandler).close();
     }
 
-    private void mockAndScheduleEvent(Runnable runnable) {
+    @Test
+    public void testSendTransactionException() throws Exception {
+        when(bgHandler.isAlive()).thenReturn(true);
+        when(bgHandler.sendTransaction(any(), anyLong())).thenThrow(RuntimeException.class);
+
+        try {
+            handler.bgGetInfo();
+        } catch (BlueGigaException ignore) {
+            assertTrue(true);
+            verify(bgHandler).close();
+        }
+    }
+
+    @Test(expected = BluegigaException.class)
+    public void testSyncCallExceptionBadResponse() throws Exception {
+        mockConnect(BgApiResponse.UNKNOWN, CONNECTION_HANDLE, DEVICE_URL);
+    }
+
+    @Test(expected = BluegigaException.class)
+    public void testSyncCallExceptionTimeout() throws Exception {
+        Whitebox.setInternalState(handler, "eventWaitTimeout", 10L);
+        mockSyncProcedure(BlueGigaDisconnectCommand.class, BlueGigaDisconnectResponse.class,
+            BgApiResponse.SUCCESS, CONNECTION_HANDLE);
+        handler.disconnect(CONNECTION_HANDLE);
+    }
+
+    @Test(expected = BluegigaException.class)
+    public void testSyncProcedureCallExceptionBadResponse() throws Exception {
+        mockSyncProcedure(BlueGigaReadByGroupTypeCommand.class, BlueGigaReadByGroupTypeResponse.class,
+            BgApiResponse.UNKNOWN, CONNECTION_HANDLE);
+        handler.getServices(CONNECTION_HANDLE);
+    }
+
+    @Test(expected = BluegigaException.class)
+    public void testSyncProcedureCallExceptionTimeout() throws Exception {
+        Whitebox.setInternalState(handler, "eventWaitTimeout", 10L);
+        mockAsyncMultiEventProcedure(BlueGigaReadByGroupTypeCommand.class, BlueGigaReadByGroupTypeResponse.class,
+            mockEvent(BlueGigaGroupFoundEvent.class, CONNECTION_HANDLE)
+        //    mockEvent(BlueGigaProcedureCompletedEvent.class, CONNECTION_HANDLE)
+        );
+        handler.getServices(CONNECTION_HANDLE);
+    }
+
+    private static void mockAndScheduleEvent(Runnable runnable) {
         Executors.newSingleThreadScheduledExecutor().schedule(runnable, 100, TimeUnit.MILLISECONDS);
     }
 
     private void mockTransaction(Class<? extends BlueGigaCommand> requestClass,
                                  BlueGigaResponse respose) throws TimeoutException {
-        when(bgHandler.sendTransaction(isA(requestClass), eq(BluegigaHandler.WAIT_EVENT_TIMEOUT)))
+        when(bgHandler.sendTransaction(isA(requestClass), anyLong()))
             .thenReturn(respose);
     }
 

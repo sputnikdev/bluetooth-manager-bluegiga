@@ -58,7 +58,7 @@ class BluegigaService implements Service {
     }
 
     @Override
-    public void dispose() { }
+    public void dispose() { /* do nothing */ }
 
     protected void addCharacteristic(BluegigaCharacteristic characteristic) {
         synchronized (characteristics) {

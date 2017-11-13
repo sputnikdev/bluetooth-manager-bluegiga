@@ -90,13 +90,12 @@ import java.util.function.Supplier;
  */
 class BluegigaHandler implements BlueGigaEventListener {
 
-    /**
-     * This value (milliseconds) is used in conversion of an async process to be synchronous.
-     * //TODO refine and come up with a proper value
-     */
-    static final long WAIT_EVENT_TIMEOUT = 10000;
+    private static final long DEFAULT_WAIT_TIME = 10000;
 
     private final Logger logger = LoggerFactory.getLogger(BluegigaAdapter.class);
+
+    private static final int ACTIVE_SCAN_INTERVAL = 0x40;
+    private static final int ACTIVE_SCAN_WINDOW = 0x20;
 
     // The Serial port name
     private String portName;
@@ -116,13 +115,13 @@ class BluegigaHandler implements BlueGigaEventListener {
     // The BlueGiga API handler
     private BlueGigaSerialHandler bgHandler;
 
-    private static final int ACTIVE_SCAN_INTERVAL = 0x40;
-    private static final int ACTIVE_SCAN_WINDOW = 0x20;
-
     private boolean discovering;
 
     // synchronisation objects (used in conversion of async processes to be synchronous)
     private final EventCaptor eventsCaptor = new EventCaptor();
+
+    // a timeout in milliseconds that specify for how long a blugiga procedure should wait between expeced events
+    private long eventWaitTimeout = DEFAULT_WAIT_TIME;
 
     protected BluegigaHandler(String portName) {
         this.portName = portName;
@@ -284,9 +283,13 @@ class BluegigaHandler implements BlueGigaEventListener {
         closeBGHandler();
     }
 
+    protected long getEventWaitTimeout() {
+        return DEFAULT_WAIT_TIME;
+    }
+
     private BlueGigaResponse sendTransaction(BlueGigaCommand command) {
         try {
-            return bgHandler.sendTransaction(command, WAIT_EVENT_TIMEOUT);
+            return bgHandler.sendTransaction(command, eventWaitTimeout);
         } catch (Exception e) {
             closeBGHandler();
             throw new BlueGigaException("Fatal error in communication with BlueGiga adapter.", e);
@@ -327,16 +330,12 @@ class BluegigaHandler implements BlueGigaEventListener {
             BgApiResponse response = initialCommand.get();
             if (response == BgApiResponse.SUCCESS) {
                 try {
-                    BlueGigaResponse event = eventsCaptor.poll();
+                    BlueGigaResponse event = eventsCaptor.poll(eventWaitTimeout);
                     if (event == null) {
                         throw new BluegigaException("Could not receive expected event");
                     }
-                    if (eventsCaptor.isCompletionEvent(event)) {
-                        eventsCaptor.reset();
-                        return (T) event;
-                    } else {
-                        throw new IllegalStateException("Bluegiga procedure has not been completed");
-                    }
+                    eventsCaptor.reset();
+                    return (T) event;
                 } catch (InterruptedException e) {
                     throw new BluegigaException("Bluegiga procedure has been interrupted", e);
                 }
@@ -360,7 +359,7 @@ class BluegigaHandler implements BlueGigaEventListener {
                     List<E> events = new ArrayList<>();
                     BlueGigaResponse event;
                     while (true) {
-                        event = eventsCaptor.poll();
+                        event = eventsCaptor.poll(eventWaitTimeout);
                         if (event == null) {
                             throw new BluegigaException("Could not receive expected event");
                         }
@@ -560,13 +559,13 @@ class BluegigaHandler implements BlueGigaEventListener {
         }
     }
 
-    private static class EventCaptor<A extends BlueGigaResponse, C extends BlueGigaResponse> {
+    private class EventCaptor<A extends BlueGigaResponse, C extends BlueGigaResponse> {
 
         private Class<A> aggregatedEventType;
         private Class<C> completedEventType;
         private Predicate<A> aggregationPredicate;
         private Predicate<C> completionPredicate;
-        private LinkedBlockingDeque<BlueGigaResponse> events = new LinkedBlockingDeque<>();
+        private final LinkedBlockingDeque<BlueGigaResponse> events = new LinkedBlockingDeque<>();
 
         private void setAggregatedEventType(Class<A> aggregatedEventType) {
             this.aggregatedEventType = aggregatedEventType;
@@ -584,8 +583,8 @@ class BluegigaHandler implements BlueGigaEventListener {
             this.completionPredicate = completionPredicate;
         }
 
-        private BlueGigaResponse poll() throws InterruptedException {
-            return events.poll(WAIT_EVENT_TIMEOUT, TimeUnit.MILLISECONDS);
+        private BlueGigaResponse poll(long timeout) throws InterruptedException {
+            return events.poll(timeout, TimeUnit.MILLISECONDS);
         }
 
         private void handleEvent(BlueGigaResponse event) {
