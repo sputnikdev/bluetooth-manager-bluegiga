@@ -111,8 +111,8 @@ public class BluegigaFactoryTest {
         assertFalse(bluegigaFactory.matchPort("COM1"));
         assertFalse(bluegigaFactory.matchPort("COM2"));
 
-        assertTrue(bluegigaFactory.matchPort("/dev/tty.serial1"));
-        assertTrue(bluegigaFactory.matchPort("/dev/tty.usbserial2"));
+        assertFalse(bluegigaFactory.matchPort("/dev/tty.serial1"));
+        assertFalse(bluegigaFactory.matchPort("/dev/tty.usbserial2"));
         assertTrue(bluegigaFactory.matchPort("/dev/tty.usbmodem3"));
     }
 
@@ -150,17 +150,17 @@ public class BluegigaFactoryTest {
 
     @Test
     public void testMatchPort() {
-        assertTrue(bluegigaFactory.matchPort("/dev/ttyS1"));
-        assertTrue(bluegigaFactory.matchPort("/dev/ttyUSB2"));
+        assertFalse(bluegigaFactory.matchPort("/dev/ttyS1"));
+        assertFalse(bluegigaFactory.matchPort("/dev/ttyUSB2"));
         assertTrue(bluegigaFactory.matchPort("/dev/ttyACM3"));
-        assertTrue(bluegigaFactory.matchPort("/dev/ttyAMA4"));
-        assertTrue(bluegigaFactory.matchPort("/dev/rfcomm15"));
+        assertFalse(bluegigaFactory.matchPort("/dev/ttyAMA4"));
+        assertFalse(bluegigaFactory.matchPort("/dev/rfcomm15"));
 
         assertTrue(bluegigaFactory.matchPort("COM1"));
         assertTrue(bluegigaFactory.matchPort("COM2"));
 
-        assertTrue(bluegigaFactory.matchPort("/dev/tty.serial1"));
-        assertTrue(bluegigaFactory.matchPort("/dev/tty.usbserial2"));
+        assertFalse(bluegigaFactory.matchPort("/dev/tty.serial1"));
+        assertFalse(bluegigaFactory.matchPort("/dev/tty.usbserial2"));
         assertTrue(bluegigaFactory.matchPort("/dev/tty.usbmodem3"));
 
         assertFalse(bluegigaFactory.matchPort("/dev/ttys000"));

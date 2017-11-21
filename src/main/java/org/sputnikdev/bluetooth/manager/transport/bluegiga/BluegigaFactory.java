@@ -48,9 +48,8 @@ import java.util.stream.Collectors;
 public class BluegigaFactory implements BluetoothObjectFactory {
 
     public static final String BLUEGIGA_PROTOCOL_NAME = "bluegiga";
-    public static final String LINUX_PORT_NAMES_REGEX =
-            "((/dev/ttyS|/dev/ttyUSB|/dev/ttyACM|/dev/ttyAMA|/dev/rfcomm)[0-9]{1,3})";
-    public static final String OSX_PORT_NAMES_REGEX = "(/dev/tty.(serial|usbserial|usbmodem).*)";
+    public static final String LINUX_PORT_NAMES_REGEX = "((/dev/ttyACM)[0-9]{1,3})";
+    public static final String OSX_PORT_NAMES_REGEX = "(/dev/tty.(usbmodem).*)";
     public static final String WINDOWS_PORT_NAMES_REGEX = "((COM)[0-9]{1,3})";
     public static final String PORT_NAMES_REGEX =
             LINUX_PORT_NAMES_REGEX + "|" + OSX_PORT_NAMES_REGEX + "|" + WINDOWS_PORT_NAMES_REGEX;
