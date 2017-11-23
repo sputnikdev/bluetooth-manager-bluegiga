@@ -340,17 +340,12 @@ public class BluegigaHandlerTest {
         verify(bgHandler).close();
     }
 
-    @Test
+    @Test(expected = BlueGigaException.class)
     public void testSendTransactionException() throws Exception {
         when(bgHandler.isAlive()).thenReturn(true);
         when(bgHandler.sendTransaction(any(), anyLong())).thenThrow(RuntimeException.class);
 
-        try {
-            handler.bgGetInfo();
-        } catch (BlueGigaException ignore) {
-            assertTrue(true);
-            verify(bgHandler).close();
-        }
+        handler.bgGetInfo();
     }
 
     @Test(expected = BluegigaException.class)

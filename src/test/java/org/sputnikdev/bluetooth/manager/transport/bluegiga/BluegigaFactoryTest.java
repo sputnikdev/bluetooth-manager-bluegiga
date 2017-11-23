@@ -79,7 +79,7 @@ public class BluegigaFactoryTest {
     private BluegigaHandler bluegigaHandler2;
 
     @InjectMocks
-    private BluegigaFactory bluegigaFactory = spy(new BluegigaFactory());
+    private BluegigaFactory bluegigaFactory = spy(new BluegigaFactory(BluegigaFactory.PORT_NAMES_REGEX));
 
     @Before
     public void setUp() {
@@ -100,7 +100,7 @@ public class BluegigaFactoryTest {
 
     @Test
     public void testBlugigaFactoryConstructor() {
-        BluegigaFactory bluegigaFactory = new BluegigaFactory(BluegigaFactory.OSX_PORT_NAMES_REGEX);
+        BluegigaFactory bluegigaFactory = new BluegigaFactory(BluegigaFactory.OSX_SERIAL_PORT_NAMES_REGEX);
 
         assertFalse(bluegigaFactory.matchPort("/dev/ttyS1"));
         assertFalse(bluegigaFactory.matchPort("/dev/ttyUSB2"));

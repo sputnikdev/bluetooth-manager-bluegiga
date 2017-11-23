@@ -68,15 +68,13 @@ import com.zsmartsystems.bluetooth.bluegiga.enumeration.GapDiscoverMode;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.GapDiscoverableMode;
 import gnu.io.NRSerialPort;
 import gnu.io.NativeResourceException;
+import gnu.io.RXTXPort;
 import gnu.io.SerialPort;
 import gnu.io.UnsupportedCommOperationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.sputnikdev.bluetooth.URL;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -100,14 +98,7 @@ class BluegigaHandler implements BlueGigaEventListener {
     // The Serial port name
     private String portName;
 
-    // The serial port.
-    private SerialPort serialPort;
-
-    // The serial port input stream.
-    private InputStream inputStream;
-
-    // The serial port output stream.
-    private OutputStream outputStream;
+    private NRSerialPort nrSerialPort;
 
     // Our BT address
     private URL adapterAddress;
@@ -270,7 +261,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         }
     }
 
-    protected void dispose() {
+    protected synchronized void dispose() {
         if (bgHandler != null && bgHandler.isAlive()) {
             try {
                 bgStopProcedure();
@@ -291,7 +282,6 @@ class BluegigaHandler implements BlueGigaEventListener {
         try {
             return bgHandler.sendTransaction(command, eventWaitTimeout);
         } catch (Exception e) {
-            closeBGHandler();
             throw new BlueGigaException("Fatal error in communication with BlueGiga adapter.", e);
         }
     }
@@ -300,23 +290,13 @@ class BluegigaHandler implements BlueGigaEventListener {
         if (bgHandler != null && bgHandler.isAlive()) {
             bgHandler.close();
         }
-        try {
-            if (inputStream != null) {
-                inputStream.close();
-                outputStream.close();
-                inputStream = null;
-                outputStream = null;
-            }
-        } catch (IOException e) {
-            logger.error("Could not close input/output stream", e);
-        }
 
-        if (serialPort != null) {
+        if (nrSerialPort != null) {
             // Note: this will fail with a SIGSEGV error on OSX:
             // Problematic frame: C  [librxtxSerial.jnilib+0x312f]  Java_gnu_io_RXTXPort_interruptEventLoop+0x6b
             // It is a known issue of the librxtxSerial lib
-            serialPort.close();
-            serialPort = null;
+            nrSerialPort.disconnect();
+            nrSerialPort = null;
         }
     }
 
@@ -504,7 +484,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         openSerialPort(portName, 115200);
 
         // Create the handler
-        bgHandler = new BlueGigaSerialHandler(inputStream, outputStream);
+        bgHandler = new BlueGigaSerialHandler(nrSerialPort.getInputStream(), nrSerialPort.getOutputStream());
 
         // Stop any procedures that are running
         bgStopProcedure();
@@ -524,11 +504,11 @@ class BluegigaHandler implements BlueGigaEventListener {
     private void openSerialPort(final String serialPortName, int baudRate) {
         logger.info("Connecting to serial port [{}]", serialPortName);
         try {
-            NRSerialPort nrSerialPort = new NRSerialPort(serialPortName, baudRate);
+            nrSerialPort = new NRSerialPort(serialPortName, baudRate);
             if (!nrSerialPort.connect()) {
                 throw new BluegigaException("Could not open serial port: " + serialPortName);
             }
-            serialPort = nrSerialPort.getSerialPortInstance();
+            RXTXPort serialPort = nrSerialPort.getSerialPortInstance();
             serialPort.setSerialPortParams(baudRate, SerialPort.DATABITS_8, SerialPort.STOPBITS_1,
                 SerialPort.PARITY_NONE);
             serialPort.setFlowControlMode(SerialPort.FLOWCONTROL_RTSCTS_OUT);
@@ -536,23 +516,16 @@ class BluegigaHandler implements BlueGigaEventListener {
             serialPort.enableReceiveThreshold(1);
             serialPort.enableReceiveTimeout(2000);
 
-            // RXTX serial port library causes high CPU load
-            // Start event listener, which will just sleep and slow down event loop
+            //RXTX serial port library causes high CPU load
+            //Start event listener, which will just sleep and slow down event loop
             serialPort.notifyOnDataAvailable(true);
 
             logger.info("Serial port [{}] is initialized.", portName);
 
         } catch (NativeResourceException e) {
             throw new BluegigaException(String.format("Native resource exception %s", serialPortName), e);
-        } catch (UnsupportedCommOperationException e) {
+        }  catch (UnsupportedCommOperationException e) {
             throw new BluegigaException(String.format("Generic serial port error %s", serialPortName), e);
-        }
-
-        try {
-            inputStream = serialPort.getInputStream();
-            outputStream = serialPort.getOutputStream();
-        } catch (IOException e) {
-            throw new BluegigaException("Error getting serial streams", e);
         }
     }
 

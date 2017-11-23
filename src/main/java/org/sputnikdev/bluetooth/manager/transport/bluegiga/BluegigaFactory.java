@@ -39,6 +39,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
 /**
@@ -47,25 +48,24 @@ import java.util.stream.Collectors;
  */
 public class BluegigaFactory implements BluetoothObjectFactory {
 
+    public static final String CONFIG_SERIAL_PORT_REGEX = "serial_port_regex";
     public static final String BLUEGIGA_PROTOCOL_NAME = "bluegiga";
-    public static final String LINUX_PORT_NAMES_REGEX = "((/dev/ttyACM)[0-9]{1,3})";
-    public static final String OSX_PORT_NAMES_REGEX = "(/dev/tty.(usbmodem).*)";
-    public static final String WINDOWS_PORT_NAMES_REGEX = "((COM)[0-9]{1,3})";
+    public static final String LINUX_SERIAL_PORT_NAMES_REGEX = "((/dev/ttyACM)[0-9]{1,3})";
+    public static final String OSX_SERIAL_PORT_NAMES_REGEX = "(/dev/tty.(usbmodem).*)";
+    public static final String WINDOWS_SERIAL_PORT_NAMES_REGEX = "((COM)[0-9]{1,3})";
     public static final String PORT_NAMES_REGEX =
-            LINUX_PORT_NAMES_REGEX + "|" + OSX_PORT_NAMES_REGEX + "|" + WINDOWS_PORT_NAMES_REGEX;
+            LINUX_SERIAL_PORT_NAMES_REGEX + "|" + OSX_SERIAL_PORT_NAMES_REGEX + "|" + WINDOWS_SERIAL_PORT_NAMES_REGEX;
+    private static final String CONFIG_SERIAL_PORT_DEFAULT = "(?!)";
 
     private Logger logger = LoggerFactory.getLogger(BluegigaFactory.class);
 
-    private final Pattern regexPortPattern;
+    private Pattern regexPortPattern = Pattern.compile(CONFIG_SERIAL_PORT_DEFAULT);
     private final Map<URL, BluegigaAdapter> adapters = new ConcurrentHashMap<>();
 
     /**
-     * Constructs Bluegiga factory based on a broad regex pattern to match serial ports:
-     * BluegigaFactory.PORT_NAMES_REGEX
+     * Constructs Bluegiga factory with the default regular expression to match nothing.
      */
-    public BluegigaFactory() {
-        regexPortPattern = Pattern.compile(PORT_NAMES_REGEX);
-    }
+    public BluegigaFactory() { }
 
     /**
      * Constructs Bluegiga factory based on a regular expression to match serial port names.
@@ -124,8 +124,6 @@ public class BluegigaFactory implements BluetoothObjectFactory {
         }
     }
 
-
-
     @Override
     public List<DiscoveredDevice> getDiscoveredDevices() {
         synchronized (adapters) {
@@ -138,6 +136,30 @@ public class BluegigaFactory implements BluetoothObjectFactory {
     @Override
     public String getProtocolName() {
         return BLUEGIGA_PROTOCOL_NAME;
+    }
+
+    /**
+     * Configures the factory.
+     * The following properties are supported:
+     * <ul>
+     *  <li>serial_port_regex - a regular expression to be used for autodiscovery of serial ports
+     *  for BlueGiga dapters</li>
+     * </ul>
+     * @param config configuration
+     */
+    @Override
+    public void configure(Map<String, Object> config) {
+        String serialPortConfig = (String) config.get(CONFIG_SERIAL_PORT_REGEX);
+        if (serialPortConfig == null || serialPortConfig.trim().isEmpty()) {
+            regexPortPattern = Pattern.compile(CONFIG_SERIAL_PORT_DEFAULT);
+            return;
+        }
+
+        try {
+            regexPortPattern = Pattern.compile(serialPortConfig);
+        } catch (PatternSyntaxException ex) {
+            throw new BluegigaException("Serial port regex is not valid", ex);
+        }
     }
 
     protected BluegigaAdapter createAdapter(String portName) {
