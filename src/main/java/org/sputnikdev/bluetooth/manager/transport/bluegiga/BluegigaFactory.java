@@ -118,19 +118,15 @@ public class BluegigaFactory implements BluetoothObjectFactory {
 
     @Override
     public List<DiscoveredAdapter> getDiscoveredAdapters() {
-        synchronized (adapters) {
-            discoverAdapters();
-            return adapters.values().stream().map(BluegigaFactory::convert).collect(Collectors.toList());
-        }
+        discoverAdapters();
+        return adapters.values().stream().map(BluegigaFactory::convert).collect(Collectors.toList());
     }
 
     @Override
     public List<DiscoveredDevice> getDiscoveredDevices() {
-        synchronized (adapters) {
-            return adapters.values().stream().filter(BluegigaAdapter::isAlive)
-                    .flatMap(adapter -> adapter.getDevices().stream())
-                    .map(BluegigaFactory::convert).collect(Collectors.toList());
-        }
+        return adapters.values().stream().filter(BluegigaAdapter::isAlive)
+                .flatMap(adapter -> adapter.getDevices().stream())
+                .map(BluegigaFactory::convert).collect(Collectors.toList());
     }
 
     @Override

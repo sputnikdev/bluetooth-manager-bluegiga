@@ -21,6 +21,7 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
  */
 
 import com.zsmartsystems.bluetooth.bluegiga.BlueGigaEventListener;
+import com.zsmartsystems.bluetooth.bluegiga.BlueGigaException;
 import com.zsmartsystems.bluetooth.bluegiga.BlueGigaResponse;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaScanResponseEvent;
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetInfoResponse;
@@ -73,6 +74,9 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
 
     @Override
     public boolean isDiscovering() {
+        if (!bgHandler.isAlive()) {
+            throw new BlueGigaException("BlueGiga handler is dead.");
+        }
         return discovering;
     }
 
@@ -121,25 +125,27 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
     @Override
     public void dispose() {
         bgHandler.removeEventListener(this);
+        bgHandler.runInSynchronizedContext(() -> {
 
-        try {
-            stopDiscovery();
-        } catch (Exception ex) {
-            logger.warn("Could not stop discovery process", ex);
-        }
+            try {
+                stopDiscovery();
+            } catch (Exception ex) {
+                logger.warn("Could not stop discovery process", ex);
+            }
 
-        synchronized (devices) {
-            devices.values().forEach(device -> {
-                try {
-                    device.dispose();
-                } catch (Exception ex) {
-                    logger.warn("Could not dispose Bluegiga device", ex);
-                }
-            });
-            devices.clear();
-        }
+            synchronized (devices) {
+                devices.values().forEach(device -> {
+                    try {
+                        device.dispose();
+                    } catch (Exception ex) {
+                        logger.warn("Could not dispose Bluegiga device", ex);
+                    }
+                });
+                devices.clear();
+            }
 
-        bgHandler.dispose();
+            bgHandler.dispose();
+        });
     }
 
     @Override

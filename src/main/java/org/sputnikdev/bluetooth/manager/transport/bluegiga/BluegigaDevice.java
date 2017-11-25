@@ -92,35 +92,38 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public boolean connect() {
-        if (!isConnected()) {
+        return bgHandler.runInSynchronizedContext(() -> {
+            if (!isConnected()) {
 
-            establishConnection();
+                establishConnection();
 
-            discoverServices();
+                discoverServices();
 
-            discoverCharacteristics();
+                discoverCharacteristics();
 
-            discoverDeclarations();
+                discoverDeclarations();
 
-            serviceResolved();
+                serviceResolved();
 
+            }
             return true;
-        }
-        return false;
+        });
     }
 
     @Override
     public boolean disconnect() {
-        if (connectionHandle >= 0) {
-            servicesUnresolved();
-            notifyConnected(false);
-            try {
-                bgHandler.disconnect(connectionHandle);
-            } finally {
-                connectionHandle = -1;
+        return bgHandler.runInSynchronizedContext(() -> {
+            if (connectionHandle >= 0) {
+                try {
+                    bgHandler.disconnect(connectionHandle);
+                } finally {
+                    connectionHandle = -1;
+                }
+                servicesUnresolved();
+                notifyConnected(false);
             }
-        }
-        return true;
+            return true;
+        });
     }
 
     @Override
@@ -477,11 +480,11 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
             if (bluegigaCharacteristic != null) {
                 bluegigaCharacteristic.setFlags(CharacteristicAccessType.parse(attributeValue[0]));
             } else {
-                logger.error("Could not find characteristic: " + characteristicUUID);
+                logger.error("Could not find characteristic: {}", characteristicUUID);
             }
 
         } else {
-            logger.error("Could not find service by handle: " + event.getAttHandle());
+            logger.error("Could not find service by handle: {}", event.getAttHandle());
         }
     }
 

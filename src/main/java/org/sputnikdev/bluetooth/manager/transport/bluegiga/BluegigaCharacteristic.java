@@ -31,6 +31,7 @@ import org.sputnikdev.bluetooth.manager.transport.Characteristic;
 import org.sputnikdev.bluetooth.manager.transport.CharacteristicAccessType;
 import org.sputnikdev.bluetooth.manager.transport.Notification;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -67,7 +68,7 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
 
     @Override
     public Set<CharacteristicAccessType> getFlags() {
-        return flags;
+        return Collections.unmodifiableSet(flags);
     }
 
     @Override
