@@ -133,16 +133,14 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
                 logger.warn("Could not stop discovery process", ex);
             }
 
-            synchronized (devices) {
-                devices.values().forEach(device -> {
-                    try {
-                        device.dispose();
-                    } catch (Exception ex) {
-                        logger.warn("Could not dispose Bluegiga device", ex);
-                    }
-                });
-                devices.clear();
-            }
+            devices.values().forEach(device -> {
+                try {
+                    device.dispose();
+                } catch (Exception ex) {
+                    logger.warn("Could not dispose Bluegiga device", ex);
+                }
+            });
+            devices.clear();
 
             bgHandler.dispose();
         });

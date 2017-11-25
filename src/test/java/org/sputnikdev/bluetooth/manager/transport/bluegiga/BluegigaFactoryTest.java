@@ -24,7 +24,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -33,6 +35,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.doAnswer;
@@ -238,9 +241,7 @@ public class BluegigaFactoryTest {
         assertEquals(1, adapters.size());
         assertTrue(adapters.containsKey(ADAPTER_URL_2));
         verify(bluegigaAdapter1).dispose();
-        verify(bluegigaHandler1).dispose();
         verify(bluegigaAdapter2, never()).dispose();
-        verify(bluegigaHandler2, never()).dispose();
 
         doThrow(new RuntimeException()).when(bluegigaAdapter2).dispose();
         when(bluegigaHandler2.isAlive()).thenReturn(false);
@@ -287,7 +288,6 @@ public class BluegigaFactoryTest {
 
         verify(adapter1).dispose();
         verify(adapter2, never()).dispose();
-        verify(bluegigaHandler1).dispose();
     }
 
     @Test

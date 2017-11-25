@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
@@ -37,9 +38,11 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.anyShort;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -114,6 +117,10 @@ public class BluegigaDeviceTest {
         verify(bluegigaHandler).addEventListener(bluegigaDevice);
 
         bluegigaDevice = spy(bluegigaDevice);
+
+        doAnswer(invocation -> {
+            return invocation.getArgumentAt(0, Supplier.class).get();
+        }).when(bluegigaHandler).runInSynchronizedContext(any(Supplier.class));
     }
 
     @Test

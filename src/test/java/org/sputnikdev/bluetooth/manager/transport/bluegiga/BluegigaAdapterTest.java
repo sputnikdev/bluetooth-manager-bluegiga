@@ -8,6 +8,7 @@ import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.internal.util.reflection.Whitebox;
 import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.stubbing.Answer;
 import org.sputnikdev.bluetooth.URL;
 import org.sputnikdev.bluetooth.manager.transport.Device;
 import org.sputnikdev.bluetooth.manager.transport.Notification;
@@ -19,6 +20,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Matchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -66,6 +70,11 @@ public class BluegigaAdapterTest {
         verify(bluegigaHandler).addEventListener(bluegigaAdapter);
 
         bluegigaAdapter = spy(bluegigaAdapter);
+
+        doAnswer(invocation -> {
+            invocation.getArgumentAt(0, Runnable.class).run();
+            return null;
+        }).when(bluegigaHandler).runInSynchronizedContext(any(Runnable.class));
     }
 
     @Test
