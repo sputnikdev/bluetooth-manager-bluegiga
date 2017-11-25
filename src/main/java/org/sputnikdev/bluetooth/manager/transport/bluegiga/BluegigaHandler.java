@@ -183,12 +183,14 @@ class BluegigaHandler implements BlueGigaEventListener {
             if (wasDiscovering) {
                 bgStopProcedure();
             }
-            BlueGigaConnectionStatusEvent result = syncCall(BlueGigaConnectionStatusEvent.class,
-                statusEvent -> statusEvent.getAddress().equals(url.getDeviceAddress()), () -> bgConnect(url));
-            if (wasDiscovering) {
-                bgStartScanning();
+            try {
+                return syncCall(BlueGigaConnectionStatusEvent.class,
+                    statusEvent -> statusEvent.getAddress().equals(url.getDeviceAddress()), () -> bgConnect(url));
+            } finally {
+                if (wasDiscovering) {
+                    bgStartScanning();
+                }
             }
-            return result;
         }
     }
 
