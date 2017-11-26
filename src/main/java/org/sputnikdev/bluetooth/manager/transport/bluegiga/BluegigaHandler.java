@@ -163,6 +163,10 @@ class BluegigaHandler implements BlueGigaEventListener {
         return adapterAddress;
     }
 
+    protected boolean isDiscovering() {
+        return discovering;
+    }
+
     protected void runInSynchronizedContext(Runnable task) {
         synchronized (eventsCaptor) {
             task.run();
@@ -176,22 +180,8 @@ class BluegigaHandler implements BlueGigaEventListener {
     }
 
     protected BlueGigaConnectionStatusEvent connect(URL url) {
-        synchronized (eventsCaptor) {
-            // a workaround for a BGAPI bug when adapter becomes unstable when discovery is enabled within
-            // an attempt to connect to a device
-            boolean wasDiscovering = discovering;
-            if (wasDiscovering) {
-                bgStopProcedure();
-            }
-            try {
-                return syncCall(BlueGigaConnectionStatusEvent.class,
-                    statusEvent -> statusEvent.getAddress().equals(url.getDeviceAddress()), () -> bgConnect(url));
-            } finally {
-                if (wasDiscovering) {
-                    bgStartScanning();
-                }
-            }
-        }
+        return syncCall(BlueGigaConnectionStatusEvent.class,
+            statusEvent -> statusEvent.getAddress().equals(url.getDeviceAddress()), () -> bgConnect(url));
     }
 
     protected BlueGigaDisconnectedEvent disconnect(int connectionHandle) {

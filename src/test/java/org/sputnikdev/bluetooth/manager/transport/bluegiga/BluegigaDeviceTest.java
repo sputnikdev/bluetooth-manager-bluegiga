@@ -160,6 +160,30 @@ public class BluegigaDeviceTest {
     }
 
     @Test
+    public void testConnectStopDiscovery() {
+        // this test not only perform testing of the connection procedure but also includes testing for the woraround
+        // of a Bluegiga bug, read some comments in the BluegigaDevice.connect method.
+
+        when(bluegigaHandler.isDiscovering()).thenReturn(true);
+
+        // mocking some stuff for the connection procedure
+        // performing the invokaction
+        BlueGigaConnectionStatusEvent event = mockConnectionStatusEvent();
+        when(bluegigaHandler.connect(DEVICE_URL)).thenReturn(event);
+
+        assertTrue(bluegigaDevice.connect());
+
+        InOrder inOrder = Mockito.inOrder(bluegigaHandler);
+        inOrder.verify(bluegigaHandler).isDiscovering();
+        inOrder.verify(bluegigaHandler).connect(DEVICE_URL);
+        inOrder.verify(bluegigaHandler).getServices(CONNECTION_HANDLE);
+        inOrder.verify(bluegigaHandler).getCharacteristics(CONNECTION_HANDLE);
+        inOrder.verify(bluegigaHandler).getDeclarations(CONNECTION_HANDLE);
+        inOrder.verify(bluegigaHandler).bgStopProcedure();
+        inOrder.verify(bluegigaHandler).bgStartScanning();
+    }
+
+    @Test
     public void testGetBluetoothClass() throws Exception {
         assertEquals(0, bluegigaDevice.getBluetoothClass());
         int[] eir = {2, EirDataType.EIR_DEVICE_CLASS.getKey(), 10};

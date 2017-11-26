@@ -38,7 +38,6 @@ import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetConnection
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetInfoCommand;
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetInfoResponse;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BgApiResponse;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.InjectMocks;
@@ -83,11 +82,6 @@ public class BluegigaHandlerTest {
     @InjectMocks
     @Spy
     private BluegigaHandler handler = new BluegigaHandler(PORT_NAME);
-
-    @Before
-    public void setUp() {
-
-    }
 
     @Test
     public void create() throws Exception {
@@ -134,25 +128,12 @@ public class BluegigaHandlerTest {
 
     @Test
     public void testConnect() throws Exception {
-        // this test not only perform testing of the connection procedure but also includes testing for the woraround
-        // of a Bluegiga bug, read some comments in the BluegigaHandler.connect method.
-
-        // starting discovery
-        mockStartStopDiscovery(BgApiResponse.SUCCESS, BgApiResponse.SUCCESS);
-        handler.bgStartScanning();
-
         // mocking some stuff for the connection procedure
         // performing the invokaction
         BlueGigaConnectionStatusEvent connectionEvent =
             mockConnect(BgApiResponse.SUCCESS, CONNECTION_HANDLE, DEVICE_URL);
 
         assertEquals(CONNECTION_HANDLE, connectionEvent.getConnection());
-
-        // verifying that the discovery has been started if it had been started before calling the connect method
-        // (the workaround)
-        verifyPrivate(handler, times(2)).invoke("bgStartScanning");
-        verifyPrivate(handler).invoke("bgStopProcedure");
-        verifyPrivate(handler).invoke("bgConnect", DEVICE_URL);
     }
 
     @Test(expected = BluegigaException.class)

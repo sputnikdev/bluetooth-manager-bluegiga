@@ -95,16 +95,30 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
         return bgHandler.runInSynchronizedContext(() -> {
             if (!isConnected()) {
 
-                establishConnection();
+                // a workaround for a BGAPI bug when adapter becomes unstable when discovery is enabled within
+                // an attempt to connect to a device
+                // we first stop any current procedure (discovery), then do the connection procedure
+                // and then restore discovery process
+                boolean wasDiscovering = bgHandler.isDiscovering();
+                bgHandler.bgStopProcedure();
 
-                discoverServices();
+                try {
+                    establishConnection();
 
-                discoverCharacteristics();
+                    discoverServices();
 
-                discoverDeclarations();
+                    discoverCharacteristics();
 
-                serviceResolved();
+                    discoverDeclarations();
 
+                    serviceResolved();
+                } finally {
+                    // resore discovery process if it was enabled
+                    if (wasDiscovering) {
+                        bgHandler.bgStopProcedure();
+                        bgHandler.bgStartScanning();
+                    }
+                }
             }
             return true;
         });
