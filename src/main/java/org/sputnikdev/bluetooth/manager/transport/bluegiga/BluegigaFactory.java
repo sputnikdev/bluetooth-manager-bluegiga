@@ -158,6 +158,20 @@ public class BluegigaFactory implements BluetoothObjectFactory {
         }
     }
 
+    /**
+     * Disposes the factory.
+     */
+    public void dispose() {
+        adapters.values().forEach(adapter -> {
+            try {
+                adapter.dispose();
+            } catch (Exception ignore) {
+                logger.warn("Could not dispose adapter: {}", adapter.getPortName());
+            }
+        });
+        adapters.clear();
+    }
+
     protected BluegigaAdapter createAdapter(String portName) {
         BluegigaHandler bluegigaHandler = BluegigaHandler.create(portName);
         try {
