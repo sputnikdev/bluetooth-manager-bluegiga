@@ -7,6 +7,11 @@
 A transport implementation for Bluetooth Manager based on Bluegiga API to work with BLE112 dongles (or similar)
 
 
+## Troubleshooting
+
+* Adapters are not getting discovered.
+  * Make sure your user has got sufficient permissions to access adapters (serial ports) in your OS (e.g. `sudo adduser <username> dialout`)
+
 ---
 ## Contribution
 
