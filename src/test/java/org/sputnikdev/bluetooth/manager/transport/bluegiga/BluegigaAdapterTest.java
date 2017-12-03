@@ -101,9 +101,10 @@ public class BluegigaAdapterTest {
 
     @Test
     public void testGetSetAlias() throws Exception {
-        // Aliases are not supported by Bluegiga
-        bluegigaAdapter.setAlias("alias");
+        // Aliases are not supported by Bluegiga, but we use just a variable to cache it
         assertNull(bluegigaAdapter.getAlias());
+        bluegigaAdapter.setAlias("alias");
+        assertEquals("alias", bluegigaAdapter.getAlias());
         verifyNoMoreInteractions(bluegigaHandler);
     }
 

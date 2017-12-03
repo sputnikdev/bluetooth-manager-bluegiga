@@ -51,12 +51,11 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
 
     private BlueGigaGetInfoResponse info;
     private boolean discovering;
-
     private final BluegigaHandler bgHandler;
-
     private final Map<URL, BluegigaDevice> devices = new HashMap<>();
-
     private Notification<Boolean> discoveringNotification;
+    // just a local cache, BlueGiga adapters do not support aliases
+    private String alias;
 
     private BluegigaAdapter(BluegigaHandler bluegigaHandler) {
         bgHandler = bluegigaHandler;
@@ -184,11 +183,13 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
 
     @Override
     public String getAlias() {
-        return null;
+        return alias;
     }
 
     @Override
-    public void setAlias(String alias) { /* do nothing */ }
+    public void setAlias(String alias) {
+        this.alias = alias;
+    }
 
     protected BluegigaDevice getDevice(URL url) {
         URL deviceURL = url.getDeviceURL();

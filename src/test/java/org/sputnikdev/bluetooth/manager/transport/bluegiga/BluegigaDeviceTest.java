@@ -200,8 +200,11 @@ public class BluegigaDeviceTest {
 
     @Test
     public void testGetSetAlias() throws Exception {
-        bluegigaDevice.setAlias("test");
+        // Aliases are not supported by Bluegiga, but we use just a variable to cache it
         assertNull(bluegigaDevice.getAlias());
+        bluegigaDevice.setAlias("alias");
+        assertEquals("alias", bluegigaDevice.getAlias());
+        verifyNoMoreInteractions(bluegigaHandler);
     }
 
     @Test

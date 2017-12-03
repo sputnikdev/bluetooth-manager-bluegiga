@@ -75,6 +75,8 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     private boolean bleEnabled;
     private boolean servicesResolved;
     private final Map<URL, BluegigaService> services = new HashMap<>();
+    // just a local cache, BlueGiga adapters do not support aliases
+    private String alias;
 
     // Notifications/listeners
     private Notification<Short> rssiNotification;
@@ -236,11 +238,13 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
      */
     @Override
     public String getAlias() {
-        return null;
+        return alias;
     }
 
     @Override
-    public void setAlias(String alias) { /* do nothing */}
+    public void setAlias(String alias) {
+        this.alias = alias;
+    }
 
     /*
         Blocking is not supported by Bluegiga devices
