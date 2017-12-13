@@ -70,6 +70,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     private final BluegigaHandler bgHandler;
     private String name;
     private short rssi;
+    private short txPower;
     private Instant lastDiscovered;
     private int bluetoothClass;
     private boolean bleEnabled;
@@ -165,6 +166,11 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
             return 0;
         }
         return rssi;
+    }
+
+    @Override
+    public short getTxPower() {
+        return txPower;
     }
 
     @Override
@@ -322,6 +328,10 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
                     List<EirFlags> eirFlags = (List<EirFlags>) eir.get(EirDataType.EIR_FLAGS);
                     // any flag would mean that the device is BLE enabled
                     bleEnabled = !eirFlags.isEmpty();
+                }
+
+                if (eir.containsKey(EirDataType.EIR_TXPOWER)) {
+                    txPower = (short) (int) eir.get(EirDataType.EIR_TXPOWER);
                 }
             }
             rssi = (short) scanEvent.getRssi();

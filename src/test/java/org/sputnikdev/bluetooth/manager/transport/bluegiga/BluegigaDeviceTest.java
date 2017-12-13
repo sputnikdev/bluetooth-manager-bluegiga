@@ -378,6 +378,14 @@ public class BluegigaDeviceTest {
         verify(servicesResovedNotification).notify(false);
     }
 
+    @Test
+    public void testGetTxPower() throws Exception {
+        assertEquals(0, bluegigaDevice.getTxPower());
+        int[] eir = {2, EirDataType.EIR_TXPOWER.getKey(), -60};
+        bluegigaDevice.bluegigaEventReceived(mockScanResponse((short) -100, eir));
+        assertEquals(-60, bluegigaDevice.getTxPower());
+    }
+
     private void assertServices() {
         List<Service> services = bluegigaDevice.getServices();
         assertEquals(2, services.size());
