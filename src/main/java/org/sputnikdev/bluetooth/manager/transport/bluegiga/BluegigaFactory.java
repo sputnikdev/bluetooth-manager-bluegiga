@@ -48,7 +48,7 @@ import java.util.stream.Collectors;
  */
 public class BluegigaFactory implements BluetoothObjectFactory {
 
-    public static final String CONFIG_SERIAL_PORT_REGEX = "serial_port_regex";
+    public static final String CONFIG_SERIAL_PORT_REGEX = "serialPortRegex";
     public static final String BLUEGIGA_PROTOCOL_NAME = "bluegiga";
     public static final String LINUX_SERIAL_PORT_NAMES_REGEX = "((/dev/ttyACM)[0-9]{1,3})";
     public static final String OSX_SERIAL_PORT_NAMES_REGEX = "(/dev/tty.(usbmodem).*)";
@@ -138,7 +138,7 @@ public class BluegigaFactory implements BluetoothObjectFactory {
      * Configures the factory.
      * The following properties are supported:
      * <ul>
-     *  <li>serial_port_regex - a regular expression to be used for autodiscovery of serial ports
+     *  <li>serialPortRegex - a regular expression to be used for autodiscovery of serial ports
      *  for BlueGiga dapters</li>
      * </ul>
      * @param config configuration
