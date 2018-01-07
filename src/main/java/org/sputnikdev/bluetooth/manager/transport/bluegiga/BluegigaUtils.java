@@ -26,7 +26,7 @@ import org.sputnikdev.bluetooth.manager.transport.BluetoothObject;
 import java.util.UUID;
 
 /**
- * Utility mathods to work with Bluegiga specific logic.
+ * Utility methods to work with Bluegiga specific logic.
  * @author Vlad Kolotov
  * @author Chris Jackson
  */
@@ -59,7 +59,7 @@ final class BluegigaUtils {
     /**
      * Deserialises into UUID object from an array of integers.
      * Copied from {@link BlueGigaResponse#deserializeUuid()}
-     * @param buffer some data represents UUID in blugiga format
+     * @param buffer some data represents UUID in bluegiga format
      * @return UUID
      */
     public static UUID deserializeUUID(int[] buffer) {

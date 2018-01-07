@@ -43,7 +43,7 @@ import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
 /**
- * A Bluetooth Manager Transport abstraction layer implementation based on BlugGiga library.
+ * A Bluetooth Manager Transport abstraction layer implementation based on BlueGiga library.
  * @author Vlad Kolotov
  */
 public class BluegigaFactory implements BluetoothObjectFactory {
@@ -139,7 +139,7 @@ public class BluegigaFactory implements BluetoothObjectFactory {
      * The following properties are supported:
      * <ul>
      *  <li>serialPortRegex - a regular expression to be used for autodiscovery of serial ports
-     *  for BlueGiga dapters</li>
+     *  for BlueGiga adapters</li>
      * </ul>
      * @param config configuration
      */

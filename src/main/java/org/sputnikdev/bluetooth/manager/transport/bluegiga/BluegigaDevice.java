@@ -342,7 +342,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     private void handleDisconnectedEvent(BlueGigaDisconnectedEvent event) {
         if (connectionHandle == event.getConnection()) {
-            logger.info("Disconnecion even received {}. Reason: {}.", url, event.getReason());
+            logger.info("Disconnection even received {}. Reason: {}.", url, event.getReason());
             if (event.getReason() != BgApiResponse.CONNECTION_TERMINATED_BY_LOCAL_HOST) {
                 servicesUnresolved();
                 notifyConnected(false);
