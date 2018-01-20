@@ -158,10 +158,9 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
 
     protected void toggleNotification(boolean enabled) {
         if (!(flags.contains(CharacteristicAccessType.NOTIFY) || flags.contains(CharacteristicAccessType.INDICATE))) {
-            logger.error("The characteristic {} does not support neither notifications nor indications", url);
-            throw new BluegigaException("The characteristic " + url
-                + " does not support neither notifications nor indications. The flags are: "
-                + flags.stream().map(Enum::toString).collect(Collectors.joining(", ")));
+            logger.debug("The characteristic {} does not support neither notifications nor indications; flags: {}.",
+                    url, flags.stream().map(Enum::toString).collect(Collectors.joining(", ")));
+            return;
         }
         BluegigaDescriptor configuration = getConfigurationDescriptor();
 

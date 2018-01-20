@@ -159,12 +159,13 @@ public class BluegigaCharacteristicTest {
         verify(notificationDescriptor).writeValue(new byte[] {0b10});
     }
 
-    @Test(expected = BluegigaException.class)
+    @Test
     public void testToggleNotificationNoFlags() throws Exception {
         characteristic.addDescriptor(notificationDescriptor);
-        when(notificationDescriptor.writeValue(anyVararg())).thenReturn(true);
 
         characteristic.toggleNotification(true);
+
+        verify(notificationDescriptor, never()).writeValue(anyVararg());
     }
 
     @Test(expected = BluegigaException.class)
