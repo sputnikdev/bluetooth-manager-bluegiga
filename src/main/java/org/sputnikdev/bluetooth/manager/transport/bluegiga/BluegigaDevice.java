@@ -269,6 +269,16 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     @Override
     public void disableBlockedNotifications() { /* do nothing */ }
 
+    @Override
+    public Map<String, byte[]> getServiceData() {
+        return null;
+    }
+
+    @Override
+    public Map<Short, byte[]> getManufacturerData() {
+        return null;
+    }
+
     protected BluegigaService getService(URL url) {
         synchronized (services) {
             return services.get(url.getServiceURL());
@@ -332,6 +342,14 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
                 if (eir.containsKey(EirDataType.EIR_TXPOWER)) {
                     txPower = (short) (int) eir.get(EirDataType.EIR_TXPOWER);
+                }
+
+                if (eir.containsKey(EirDataType.EIR_SVC_DATA_UUID16)) {
+
+                }
+
+                if (eir.containsKey(EirDataType.EIR_MANUFACTURER_SPECIFIC)) {
+
                 }
             }
             rssi = (short) scanEvent.getRssi();
