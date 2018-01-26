@@ -46,6 +46,8 @@ import com.zsmartsystems.bluetooth.bluegiga.command.connection.BlueGigaDisconnec
 import com.zsmartsystems.bluetooth.bluegiga.command.connection.BlueGigaDisconnectedEvent;
 import com.zsmartsystems.bluetooth.bluegiga.command.connection.BlueGigaGetRssiCommand;
 import com.zsmartsystems.bluetooth.bluegiga.command.connection.BlueGigaGetRssiResponse;
+import com.zsmartsystems.bluetooth.bluegiga.command.connection.BlueGigaGetStatusCommand;
+import com.zsmartsystems.bluetooth.bluegiga.command.connection.BlueGigaGetStatusResponse;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaConnectDirectCommand;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaConnectDirectResponse;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaDiscoverCommand;
@@ -269,6 +271,11 @@ class BluegigaHandler implements BlueGigaEventListener {
         }
     }
 
+    protected BlueGigaConnectionStatusEvent getConnectionStatus(int connectionHandle) {
+        return syncCall(BlueGigaConnectionStatusEvent.class, p -> p.getConnection() == connectionHandle,
+                () -> bgGetStatus(connectionHandle));
+    }
+
     protected void dispose() {
         synchronized (eventsCaptor) {
             if (bgHandler != null && bgHandler.isAlive()) {
@@ -416,6 +423,16 @@ class BluegigaHandler implements BlueGigaEventListener {
         BlueGigaSetModeResponse response = (BlueGigaSetModeResponse) sendTransaction(command);
 
         return response.getResult() == BgApiResponse.SUCCESS;
+    }
+
+    private BgApiResponse bgGetStatus(int connectionHandle) {
+        BlueGigaGetStatusCommand command = new BlueGigaGetStatusCommand();
+        command.setConnection(connectionHandle);
+        BlueGigaGetStatusResponse response = (BlueGigaGetStatusResponse) sendTransaction(command);
+
+        return response.getConnection() == connectionHandle
+                ? BgApiResponse.getBgApiResponse(BgApiResponse.SUCCESS.getKey())
+                : BgApiResponse.getBgApiResponse(BgApiResponse.UNKNOWN.getKey());
     }
 
     private BgApiResponse bgFindPrimaryServices(int connectionHandle) {

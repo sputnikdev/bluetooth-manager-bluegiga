@@ -75,6 +75,9 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     private int bluetoothClass;
     private boolean bleEnabled;
     private boolean servicesResolved;
+    private boolean servicesCached;
+    private boolean characteristicCached;
+    private boolean declarationsCached;
     private final Map<URL, BluegigaService> services = new HashMap<>();
     // just a local cache, BlueGiga adapters do not support aliases
     private String alias;
@@ -108,15 +111,28 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
                 try {
                     establishConnection();
 
-                    discoverServices();
+                    if (!servicesCached) {
+                        discoverServices();
+                        servicesCached = true;
+                    }
 
-                    discoverCharacteristics();
+                    if (!characteristicCached) {
+                        discoverCharacteristics();
+                        characteristicCached = true;
+                    }
 
-                    discoverDeclarations();
+                    if (!declarationsCached) {
+                        discoverDeclarations();
+                        declarationsCached = true;
+                    }
 
                     serviceResolved();
+
+                    BlueGigaConnectionStatusEvent status = bgHandler.getConnectionStatus(connectionHandle);
+                    logger.info("Connection procedure completed: {}; flags: {}.", status.getAddressType(),
+                            status.getFlags().stream().map(Enum::toString).collect(Collectors.joining(", ")));
                 } finally {
-                    // resore discovery process if it was enabled
+                    // restore discovery process if it was enabled
                     if (wasDiscovering) {
                         bgHandler.bgStopProcedure();
                         bgHandler.bgStartScanning();
@@ -228,6 +244,12 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     @Override
     public void dispose() {
         disconnect();
+        synchronized (services) {
+            services.clear();
+            servicesCached = false;
+            characteristicCached = false;
+            declarationsCached = false;
+        }
     }
 
     @Override
@@ -353,9 +375,6 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     private void servicesUnresolved() {
         if (servicesResolved) {
-            synchronized (services) {
-                services.clear();
-            }
             notifyServicesResolved(false);
             servicesResolved = false;
         }

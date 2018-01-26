@@ -23,6 +23,8 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
 import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaAttributeValueEvent;
 import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaProcedureCompletedEvent;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BgApiResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.sputnikdev.bluetooth.URL;
 import org.sputnikdev.bluetooth.manager.transport.Descriptor;
 
@@ -31,6 +33,8 @@ import org.sputnikdev.bluetooth.manager.transport.Descriptor;
  * @author Vlad Kolotov
  */
 class BluegigaDescriptor implements Descriptor {
+
+    private final Logger logger = LoggerFactory.getLogger(BluegigaDescriptor.class);
 
     private final URL url;
     private final int connectionHandle;
@@ -55,7 +59,11 @@ class BluegigaDescriptor implements Descriptor {
     public boolean writeValue(byte[] bytes) {
         int[] data = BluegigaUtils.fromBytes(bytes);
         BlueGigaProcedureCompletedEvent event = bgHandler.writeCharacteristic(connectionHandle, descriptorHandle, data);
-        return event.getResult() == BgApiResponse.SUCCESS;
+        if (event.getResult() != BgApiResponse.SUCCESS) {
+            logger.warn("Write operation failed for {} descriptor. Response: {}.", url, event.getResult());
+            return false;
+        }
+        return true;
     }
 
     @Override
