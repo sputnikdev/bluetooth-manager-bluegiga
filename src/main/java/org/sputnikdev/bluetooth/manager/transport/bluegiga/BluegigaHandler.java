@@ -185,7 +185,7 @@ class BluegigaHandler implements BlueGigaEventListener {
     protected BlueGigaConnectionStatusEvent connect(URL url, BluetoothAddressType bluetoothAddressType) {
         return syncCall(BlueGigaConnectionStatusEvent.class,
             statusEvent -> statusEvent.getAddress().equals(url.getDeviceAddress()),
-                () -> bgConnect(url, bluetoothAddressType));
+            () -> bgConnect(url, bluetoothAddressType));
     }
 
     protected BlueGigaDisconnectedEvent disconnect(int connectionHandle) {
