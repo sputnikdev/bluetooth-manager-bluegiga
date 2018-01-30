@@ -37,7 +37,9 @@ import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetConnection
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetConnectionsResponse;
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetInfoCommand;
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetInfoResponse;
+import com.zsmartsystems.bluetooth.bluegiga.enumeration.AttributeValueType;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BgApiResponse;
+import com.zsmartsystems.bluetooth.bluegiga.enumeration.BluetoothAddressType;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.InjectMocks;
@@ -139,7 +141,7 @@ public class BluegigaHandlerTest {
     @Test(expected = BluegigaException.class)
     public void testConnectError() throws Exception {
         mockConnect(BgApiResponse.TIMEOUT, CONNECTION_HANDLE, DEVICE_URL);
-        handler.connect(DEVICE_URL);
+        handler.connect(DEVICE_URL, BluetoothAddressType.UNKNOWN);
     }
 
     @Test
@@ -179,8 +181,10 @@ public class BluegigaHandlerTest {
     @Test
     public void testGetDeclarations() throws Exception {
         mockAsyncMultiEventProcedure(BlueGigaReadByTypeCommand.class, BlueGigaReadByTypeResponse.class,
-            mockEvent(BlueGigaAttributeValueEvent.class, CONNECTION_HANDLE),
-            mockEvent(BlueGigaAttributeValueEvent.class, CONNECTION_HANDLE),
+            mockEvent(BlueGigaAttributeValueEvent.class, CONNECTION_HANDLE,
+                    AttributeValueType.ATTCLIENT_ATTRIBUTE_VALUE_TYPE_READ_BY_TYPE),
+            mockEvent(BlueGigaAttributeValueEvent.class, CONNECTION_HANDLE,
+                    AttributeValueType.ATTCLIENT_ATTRIBUTE_VALUE_TYPE_READ_BY_TYPE),
             mockEvent(BlueGigaGroupFoundEvent.class, 2),
             mockEvent(BlueGigaProcedureCompletedEvent.class, CONNECTION_HANDLE));
         List<BlueGigaAttributeValueEvent> events = handler.getDeclarations(CONNECTION_HANDLE);
@@ -392,7 +396,7 @@ public class BluegigaHandlerTest {
         mockAsyncProcedure(BlueGigaConnectDirectCommand.class,
             BlueGigaConnectDirectResponse.class,
             BlueGigaConnectionStatusEvent.class, response, connectionHandle, url.getDeviceAddress());
-        return handler.connect(url);
+        return handler.connect(url, BluetoothAddressType.UNKNOWN);
     }
 
     private BlueGigaDisconnectedEvent mockDisconnect(BgApiResponse response, int connectionHandle)
@@ -462,9 +466,15 @@ public class BluegigaHandlerTest {
     }
 
     private <E extends BlueGigaResponse> E mockEvent(Class<E> eventClass, int connectionHandle) {
+        return mockEvent(eventClass, connectionHandle, null);
+    }
+
+    private <E extends BlueGigaResponse> E mockEvent(Class<E> eventClass, int connectionHandle,
+                                                     AttributeValueType attributeValueType) {
         E event = mock(eventClass);
         tryMock(event, "getConnection", connectionHandle);
         tryMock(event, "getAddress", adapterAddress);
+        tryMock(event, "getType", attributeValueType);
         return event;
     }
 

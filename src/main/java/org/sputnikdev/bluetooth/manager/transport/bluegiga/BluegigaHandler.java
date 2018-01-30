@@ -63,6 +63,7 @@ import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetConnection
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetConnectionsResponse;
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetInfoCommand;
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetInfoResponse;
+import com.zsmartsystems.bluetooth.bluegiga.enumeration.AttributeValueType;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BgApiResponse;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BluetoothAddressType;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.GapConnectableMode;
@@ -181,9 +182,10 @@ class BluegigaHandler implements BlueGigaEventListener {
         }
     }
 
-    protected BlueGigaConnectionStatusEvent connect(URL url) {
+    protected BlueGigaConnectionStatusEvent connect(URL url, BluetoothAddressType bluetoothAddressType) {
         return syncCall(BlueGigaConnectionStatusEvent.class,
-            statusEvent -> statusEvent.getAddress().equals(url.getDeviceAddress()), () -> bgConnect(url));
+            statusEvent -> statusEvent.getAddress().equals(url.getDeviceAddress()),
+                () -> bgConnect(url, bluetoothAddressType));
     }
 
     protected BlueGigaDisconnectedEvent disconnect(int connectionHandle) {
@@ -205,7 +207,8 @@ class BluegigaHandler implements BlueGigaEventListener {
     }
 
     protected List<BlueGigaAttributeValueEvent> getDeclarations(int connectionHandle) {
-        return syncCallProcedure(BlueGigaAttributeValueEvent.class, p -> p.getConnection() == connectionHandle,
+        return syncCallProcedure(BlueGigaAttributeValueEvent.class, p -> p.getConnection() == connectionHandle
+                        && p.getType() == AttributeValueType.ATTCLIENT_ATTRIBUTE_VALUE_TYPE_READ_BY_TYPE,
                 BlueGigaProcedureCompletedEvent.class, p -> p.getConnection() == connectionHandle,
             () -> bgFindDeclarations(connectionHandle));
     }
@@ -273,7 +276,7 @@ class BluegigaHandler implements BlueGigaEventListener {
 
     protected BlueGigaConnectionStatusEvent getConnectionStatus(int connectionHandle) {
         return syncCall(BlueGigaConnectionStatusEvent.class, p -> p.getConnection() == connectionHandle,
-                () -> bgGetStatus(connectionHandle));
+            () -> bgGetStatus(connectionHandle));
     }
 
     protected void dispose() {
@@ -388,7 +391,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         throw new IllegalStateException("Could not get adapter address");
     }
 
-    private BgApiResponse bgConnect(URL url) {
+    private BgApiResponse bgConnect(URL url, BluetoothAddressType bluetoothAddressType) {
         // Connect...
         //TODO revise these constants, especially the "latency" as it may improve devices energy consumption
         // BG spec: This parameter configures the slave latency. Slave latency defines how many connection intervals
@@ -401,7 +404,7 @@ class BluegigaHandler implements BlueGigaEventListener {
 
         BlueGigaConnectDirectCommand connect = new BlueGigaConnectDirectCommand();
         connect.setAddress(url.getDeviceAddress());
-        connect.setAddrType(BluetoothAddressType.UNKNOWN);
+        connect.setAddrType(bluetoothAddressType);
         connect.setConnIntervalMin(connIntervalMin);
         connect.setConnIntervalMax(connIntervalMax);
         connect.setLatency(latency);

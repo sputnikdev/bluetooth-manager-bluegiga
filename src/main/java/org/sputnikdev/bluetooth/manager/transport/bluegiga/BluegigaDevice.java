@@ -32,6 +32,7 @@ import com.zsmartsystems.bluetooth.bluegiga.eir.EirDataType;
 import com.zsmartsystems.bluetooth.bluegiga.eir.EirFlags;
 import com.zsmartsystems.bluetooth.bluegiga.eir.EirPacket;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BgApiResponse;
+import com.zsmartsystems.bluetooth.bluegiga.enumeration.BluetoothAddressType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.sputnikdev.bluetooth.URL;
@@ -55,6 +56,7 @@ import java.util.stream.Collectors;
 
 /**
  * Bluegiga transport device.
+ *
  * @author Vlad Kolotov
  * @author Chris Jackson
  */
@@ -69,6 +71,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     private final URL url;
     private final BluegigaHandler bgHandler;
     private String name;
+    private BluetoothAddressType addressType = BluetoothAddressType.UNKNOWN;
     private short rssi;
     private short txPower;
     private Instant lastDiscovered;
@@ -127,10 +130,6 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
                     }
 
                     serviceResolved();
-
-                    BlueGigaConnectionStatusEvent status = bgHandler.getConnectionStatus(connectionHandle);
-                    logger.info("Connection procedure completed: {}; flags: {}.", status.getAddressType(),
-                            status.getFlags().stream().map(Enum::toString).collect(Collectors.joining(", ")));
                 } finally {
                     // restore discovery process if it was enabled
                     if (wasDiscovering) {
@@ -291,6 +290,15 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     @Override
     public void disableBlockedNotifications() { /* do nothing */ }
 
+    @Override
+    public org.sputnikdev.bluetooth.manager.BluetoothAddressType getAddressType() {
+        switch (addressType != null ? addressType : BluetoothAddressType.UNKNOWN) {
+            case GAP_ADDRESS_TYPE_PUBLIC: return org.sputnikdev.bluetooth.manager.BluetoothAddressType.PUBLIC;
+            case GAP_ADDRESS_TYPE_RANDOM: return org.sputnikdev.bluetooth.manager.BluetoothAddressType.RANDOM;
+            default: return org.sputnikdev.bluetooth.manager.BluetoothAddressType.UNKNOWN;
+        }
+    }
+
     protected BluegigaService getService(URL url) {
         synchronized (services) {
             return services.get(url.getServiceURL());
@@ -299,7 +307,8 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     protected void establishConnection() {
         logger.info("Trying to connect: {}", url);
-        BlueGigaConnectionStatusEvent event = bgHandler.connect(url);
+        BlueGigaConnectionStatusEvent event = bgHandler.connect(url,
+                addressType != null ? addressType : BluetoothAddressType.UNKNOWN);
         logger.info("Connected: {}", url);
 
         connectionHandle = event.getConnection();
@@ -357,6 +366,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
                 }
             }
             rssi = (short) scanEvent.getRssi();
+            addressType = scanEvent.getAddressType();
             lastDiscovered = Instant.now();
             notifyRSSIChanged(rssi);
         }
