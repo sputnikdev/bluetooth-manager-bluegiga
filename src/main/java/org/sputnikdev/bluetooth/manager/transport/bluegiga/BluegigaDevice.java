@@ -291,6 +291,16 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     public void disableBlockedNotifications() { /* do nothing */ }
 
     @Override
+    public Map<String, byte[]> getServiceData() {
+        return null;
+    }
+
+    @Override
+    public Map<Short, byte[]> getManufacturerData() {
+        return null;
+    }
+
+    @Override
     public org.sputnikdev.bluetooth.manager.BluetoothAddressType getAddressType() {
         switch (addressType != null ? addressType : BluetoothAddressType.UNKNOWN) {
             case GAP_ADDRESS_TYPE_PUBLIC: return org.sputnikdev.bluetooth.manager.BluetoothAddressType.PUBLIC;
@@ -363,6 +373,14 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
                 if (eir.containsKey(EirDataType.EIR_TXPOWER)) {
                     txPower = (short) (int) eir.get(EirDataType.EIR_TXPOWER);
+                }
+
+                if (eir.containsKey(EirDataType.EIR_SVC_DATA_UUID16)) {
+                    //TODO implement me
+                }
+
+                if (eir.containsKey(EirDataType.EIR_MANUFACTURER_SPECIFIC)) {
+                    //TODO implement me
                 }
             }
             rssi = (short) scanEvent.getRssi();
