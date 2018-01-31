@@ -8,6 +8,7 @@ import com.zsmartsystems.bluetooth.bluegiga.command.connection.BlueGigaDisconnec
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaScanResponseEvent;
 import com.zsmartsystems.bluetooth.bluegiga.eir.EirDataType;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BgApiResponse;
+import com.zsmartsystems.bluetooth.bluegiga.enumeration.BluetoothAddressType;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -42,6 +43,7 @@ import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.anyShort;
+import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
@@ -92,7 +94,7 @@ public class BluegigaDeviceTest {
         bluegigaDevice = new BluegigaDevice(bluegigaHandler, DEVICE_URL);
 
         connectionStatusEvent = mockConnectionStatusEvent();
-        when(bluegigaHandler.connect(DEVICE_URL)).thenReturn(connectionStatusEvent);
+        when(bluegigaHandler.connect(DEVICE_URL, BluetoothAddressType.UNKNOWN)).thenReturn(connectionStatusEvent);
 
         List<BlueGigaGroupFoundEvent> serviceEvents = new ArrayList<>();
         serviceEvents.add(mockServiceEvent(BATTERY_SERVICE_URL, 1, 10));
@@ -124,7 +126,7 @@ public class BluegigaDeviceTest {
     }
 
     @Test
-    public void testConnectOrderOfOperations() throws Exception {
+    public void testConnectOrderOfOperations() {
         assertTrue(bluegigaDevice.connect());
 
         InOrder inOrder = Mockito.inOrder(bluegigaDevice);
@@ -136,10 +138,10 @@ public class BluegigaDeviceTest {
     }
 
     @Test
-    public void testConnect() throws Exception {
+    public void testConnect() {
         bluegigaDevice.enableConnectedNotifications(booleanNotification);
         BlueGigaConnectionStatusEvent event = mockConnectionStatusEvent();
-        when(bluegigaHandler.connect(DEVICE_URL)).thenReturn(event);
+        when(bluegigaHandler.connect(DEVICE_URL, BluetoothAddressType.UNKNOWN)).thenReturn(event);
 
         assertTrue(bluegigaDevice.connect());
 
@@ -151,12 +153,34 @@ public class BluegigaDeviceTest {
 
         assertTrue(bluegigaDevice.isServicesResolved());
 
-        verify(bluegigaHandler).connect(DEVICE_URL);
+        verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.UNKNOWN);
         verify(bluegigaHandler).getServices(CONNECTION_HANDLE);
         verify(bluegigaHandler).getCharacteristics(CONNECTION_HANDLE);
         verify(bluegigaHandler).getDeclarations(CONNECTION_HANDLE);
         verify(booleanNotification).notify(true);
         assertEquals(CONNECTION_HANDLE, bluegigaDevice.getConnectionHandle());
+    }
+
+    @Test
+    public void testConnectAddressType() {
+        bluegigaDevice.enableConnectedNotifications(booleanNotification);
+        BlueGigaConnectionStatusEvent event = mockConnectionStatusEvent();
+        when(bluegigaHandler.connect(eq(DEVICE_URL), any())).thenReturn(event);
+
+        assertTrue(bluegigaDevice.connect());
+        verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.UNKNOWN);
+        bluegigaDevice.disconnect();
+
+        bluegigaDevice.bluegigaEventReceived(mockScanResponse((short) -100,
+                BluetoothAddressType.GAP_ADDRESS_TYPE_PUBLIC));
+        assertTrue(bluegigaDevice.connect());
+        verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.GAP_ADDRESS_TYPE_PUBLIC);
+        bluegigaDevice.disconnect();
+
+        bluegigaDevice.bluegigaEventReceived(mockScanResponse((short) -100,
+                BluetoothAddressType.GAP_ADDRESS_TYPE_RANDOM));
+        assertTrue(bluegigaDevice.connect());
+        verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.GAP_ADDRESS_TYPE_RANDOM);
     }
 
     @Test
@@ -169,13 +193,13 @@ public class BluegigaDeviceTest {
         // mocking some stuff for the connection procedure
         // performing the invokaction
         BlueGigaConnectionStatusEvent event = mockConnectionStatusEvent();
-        when(bluegigaHandler.connect(DEVICE_URL)).thenReturn(event);
+        when(bluegigaHandler.connect(DEVICE_URL, BluetoothAddressType.UNKNOWN)).thenReturn(event);
 
         assertTrue(bluegigaDevice.connect());
 
         InOrder inOrder = Mockito.inOrder(bluegigaHandler);
         inOrder.verify(bluegigaHandler).isDiscovering();
-        inOrder.verify(bluegigaHandler).connect(DEVICE_URL);
+        inOrder.verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.UNKNOWN);
         inOrder.verify(bluegigaHandler).getServices(CONNECTION_HANDLE);
         inOrder.verify(bluegigaHandler).getCharacteristics(CONNECTION_HANDLE);
         inOrder.verify(bluegigaHandler).getDeclarations(CONNECTION_HANDLE);
@@ -184,7 +208,7 @@ public class BluegigaDeviceTest {
     }
 
     @Test
-    public void testGetBluetoothClass() throws Exception {
+    public void testGetBluetoothClass() {
         assertEquals(0, bluegigaDevice.getBluetoothClass());
         int[] eir = {2, EirDataType.EIR_DEVICE_CLASS.getKey(), 10};
         bluegigaDevice.bluegigaEventReceived(mockScanResponse((short) -100, eir));
@@ -192,14 +216,27 @@ public class BluegigaDeviceTest {
     }
 
     @Test
-    public void testGetName() throws Exception {
+    public void testGetName() {
         assertEquals(DEVICE_URL.getDeviceAddress(), bluegigaDevice.getName());
         bluegigaDevice.bluegigaEventReceived(mockScanResponse((short) -100));
         assertEquals("Smartlock", bluegigaDevice.getName());
     }
 
     @Test
-    public void testGetSetAlias() throws Exception {
+    public void testGetAddressType() {
+        assertEquals(org.sputnikdev.bluetooth.manager.BluetoothAddressType.UNKNOWN, bluegigaDevice.getAddressType());
+
+        bluegigaDevice.bluegigaEventReceived(mockScanResponse((short) -100,
+                BluetoothAddressType.GAP_ADDRESS_TYPE_PUBLIC));
+        assertEquals(org.sputnikdev.bluetooth.manager.BluetoothAddressType.PUBLIC, bluegigaDevice.getAddressType());
+
+        bluegigaDevice.bluegigaEventReceived(mockScanResponse((short) -100,
+                BluetoothAddressType.GAP_ADDRESS_TYPE_RANDOM));
+        assertEquals(org.sputnikdev.bluetooth.manager.BluetoothAddressType.RANDOM, bluegigaDevice.getAddressType());
+    }
+
+    @Test
+    public void testGetSetAlias() {
         // Aliases are not supported by Bluegiga, but we use just a variable to cache it
         assertNull(bluegigaDevice.getAlias());
         bluegigaDevice.setAlias("alias");
@@ -208,7 +245,7 @@ public class BluegigaDeviceTest {
     }
 
     @Test
-    public void testIsBleEnabled() throws Exception {
+    public void testIsBleEnabled() {
         // a packet without EIR flags
         int[] eir = {10, 8, 83, 109, 97, 114, 116, 108, 111, 99, 107};
         bluegigaDevice.bluegigaEventReceived(mockScanResponse((short) -100, eir));
@@ -219,7 +256,7 @@ public class BluegigaDeviceTest {
     }
 
     @Test
-    public void testBlocked() throws Exception {
+    public void testBlocked() {
         // blicking is not supported by Bluegiga
         bluegigaDevice.enableBlockedNotifications(null);
         bluegigaDevice.disableBlockedNotifications();
@@ -228,7 +265,7 @@ public class BluegigaDeviceTest {
     }
 
     @Test
-    public void testGetRSSI() throws Exception {
+    public void testGetRSSI() {
         doReturn(false).when(bluegigaDevice).isConnected();
 
         assertEquals(0, bluegigaDevice.getRSSI());
@@ -248,7 +285,7 @@ public class BluegigaDeviceTest {
     }
 
     @Test
-    public void testRSSINotifications() throws Exception {
+    public void testRSSINotifications() {
         Notification<Short> notification = (Notification<Short>) mock(Notification.class);
         doThrow(RuntimeException.class).when(notification).notify(anyShort());
         bluegigaDevice.enableRSSINotifications(notification);
@@ -265,7 +302,7 @@ public class BluegigaDeviceTest {
     }
 
     @Test
-    public void testIsConnected() throws Exception {
+    public void testIsConnected() {
 
         when(bluegigaHandler.disconnect(CONNECTION_HANDLE)).thenReturn(mock(BlueGigaDisconnectedEvent.class));
 
@@ -278,17 +315,17 @@ public class BluegigaDeviceTest {
         assertFalse(bluegigaDevice.isConnected());
 
         verify(connectionStatusEvent).getConnection();
-        verify(bluegigaHandler).connect(DEVICE_URL);
+        verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.UNKNOWN);
         verify(bluegigaHandler).disconnect(CONNECTION_HANDLE);
     }
 
     @Test
-    public void testConnectedNotifications() throws Exception {
+    public void testConnectedNotifications() {
         doThrow(RuntimeException.class).when(booleanNotification).notify(anyBoolean());
         bluegigaDevice.enableConnectedNotifications(booleanNotification);
 
         BlueGigaConnectionStatusEvent event = mockConnectionStatusEvent();
-        when(bluegigaHandler.connect(DEVICE_URL)).thenReturn(event);
+        when(bluegigaHandler.connect(DEVICE_URL, BluetoothAddressType.UNKNOWN)).thenReturn(event);
 
         bluegigaDevice.connect();
         verify(booleanNotification).notify(true);
@@ -304,12 +341,12 @@ public class BluegigaDeviceTest {
     }
 
     @Test
-    public void testServicesResolvedNotification() throws Exception {
+    public void testServicesResolvedNotification() {
         doThrow(RuntimeException.class).when(booleanNotification).notify(anyBoolean());
         bluegigaDevice.enableServicesResolvedNotifications(booleanNotification);
 
         BlueGigaConnectionStatusEvent event = mockConnectionStatusEvent();
-        when(bluegigaHandler.connect(DEVICE_URL)).thenReturn(event);
+        when(bluegigaHandler.connect(DEVICE_URL, BluetoothAddressType.UNKNOWN)).thenReturn(event);
 
         bluegigaDevice.connect();
         verify(booleanNotification).notify(true);
@@ -325,19 +362,19 @@ public class BluegigaDeviceTest {
     }
 
     @Test
-    public void testGetURL() throws Exception {
+    public void testGetURL() {
         assertEquals(DEVICE_URL, bluegigaDevice.getURL());
     }
 
     @Test
-    public void testDispose() throws Exception {
+    public void testDispose() {
         bluegigaDevice.connect();
         bluegigaDevice.dispose();
         verify(bluegigaDevice).disconnect();
     }
 
     @Test
-    public void testGetService() throws Exception {
+    public void testGetService() {
         bluegigaDevice.connect();
         assertTrue(bluegigaDevice.isConnected());
         assertNotNull(bluegigaDevice.getService(BATTERY_SERVICE_URL));
@@ -379,7 +416,7 @@ public class BluegigaDeviceTest {
     }
 
     @Test
-    public void testGetTxPower() throws Exception {
+    public void testGetTxPower() {
         assertEquals(0, bluegigaDevice.getTxPower());
         int[] eir = {2, EirDataType.EIR_TXPOWER.getKey(), -60};
         bluegigaDevice.bluegigaEventReceived(mockScanResponse((short) -100, eir));
@@ -446,18 +483,27 @@ public class BluegigaDeviceTest {
         return mockScanResponse(rssi, EIR_SMARTLOCK_PACKET);
     }
 
+    private BlueGigaScanResponseEvent mockScanResponse(short rssi, BluetoothAddressType addressType) {
+        return mockScanResponse(rssi, EIR_SMARTLOCK_PACKET, addressType);
+    }
+
     private BlueGigaScanResponseEvent mockScanResponse(short rssi, int[] eir) {
+        return mockScanResponse(rssi, eir, null);
+    }
+
+    private BlueGigaScanResponseEvent mockScanResponse(short rssi, int[] eir, BluetoothAddressType addressType) {
         BlueGigaScanResponseEvent event = mock(BlueGigaScanResponseEvent.class);
         when(event.getSender()).thenReturn(DEVICE_URL.getDeviceAddress());
         when(event.getData()).thenReturn(eir);
         when(event.getRssi()).thenReturn((int) rssi);
+        when(event.getAddressType()).thenReturn(addressType);
         return event;
     }
 
     private BlueGigaConnectionStatusEvent mockConnectionStatusEvent() {
         BlueGigaConnectionStatusEvent event = mock(BlueGigaConnectionStatusEvent.class);
         when(event.getConnection()).thenReturn(CONNECTION_HANDLE);
-        when(bluegigaHandler.connect(DEVICE_URL)).thenReturn(event);
+        when(bluegigaHandler.connect(DEVICE_URL, BluetoothAddressType.UNKNOWN)).thenReturn(event);
         return event;
     }
 
