@@ -32,6 +32,7 @@ import com.zsmartsystems.bluetooth.bluegiga.eir.EirDataType;
 import com.zsmartsystems.bluetooth.bluegiga.eir.EirFlags;
 import com.zsmartsystems.bluetooth.bluegiga.eir.EirPacket;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BgApiResponse;
+import com.zsmartsystems.bluetooth.bluegiga.enumeration.BluetoothAddressType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.sputnikdev.bluetooth.URL;
@@ -48,6 +49,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -55,6 +57,7 @@ import java.util.stream.Collectors;
 
 /**
  * Bluegiga transport device.
+ *
  * @author Vlad Kolotov
  * @author Chris Jackson
  */
@@ -69,20 +72,28 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     private final URL url;
     private final BluegigaHandler bgHandler;
     private String name;
+    private BluetoothAddressType addressType = BluetoothAddressType.UNKNOWN;
     private short rssi;
     private short txPower;
     private Instant lastDiscovered;
     private int bluetoothClass;
     private boolean bleEnabled;
     private boolean servicesResolved;
+    private boolean servicesCached;
+    private boolean characteristicCached;
+    private boolean declarationsCached;
     private final Map<URL, BluegigaService> services = new HashMap<>();
     // just a local cache, BlueGiga adapters do not support aliases
     private String alias;
+    private Map<Short, byte[]> manufacturerData = new ConcurrentHashMap<>();
+    private Map<String, byte[]> serviceData = new ConcurrentHashMap<>();
 
     // Notifications/listeners
     private Notification<Short> rssiNotification;
     private Notification<Boolean> connectedNotification;
     private Notification<Boolean> serviceResolvedNotification;
+    private Notification<Map<String, byte[]>> serviceDataNotification;
+    private Notification<Map<Short, byte[]>> manufacturerDataNotification;
 
     // BG specific variables
     private int connectionHandle = -1;
@@ -108,15 +119,24 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
                 try {
                     establishConnection();
 
-                    discoverServices();
+                    if (!servicesCached) {
+                        discoverServices();
+                        servicesCached = true;
+                    }
 
-                    discoverCharacteristics();
+                    if (!characteristicCached) {
+                        discoverCharacteristics();
+                        characteristicCached = true;
+                    }
 
-                    discoverDeclarations();
+                    if (!declarationsCached) {
+                        discoverDeclarations();
+                        declarationsCached = true;
+                    }
 
                     serviceResolved();
                 } finally {
-                    // resore discovery process if it was enabled
+                    // restore discovery process if it was enabled
                     if (wasDiscovering) {
                         bgHandler.bgStopProcedure();
                         bgHandler.bgStartScanning();
@@ -228,6 +248,12 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     @Override
     public void dispose() {
         disconnect();
+        synchronized (services) {
+            services.clear();
+            servicesCached = false;
+            characteristicCached = false;
+            declarationsCached = false;
+        }
     }
 
     @Override
@@ -271,12 +297,41 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public Map<String, byte[]> getServiceData() {
-        return null;
+        return new HashMap<>(serviceData);
     }
 
     @Override
     public Map<Short, byte[]> getManufacturerData() {
-        return null;
+        return new HashMap<>(manufacturerData);
+    }
+
+    @Override
+    public org.sputnikdev.bluetooth.manager.BluetoothAddressType getAddressType() {
+        switch (addressType != null ? addressType : BluetoothAddressType.UNKNOWN) {
+            case GAP_ADDRESS_TYPE_PUBLIC: return org.sputnikdev.bluetooth.manager.BluetoothAddressType.PUBLIC;
+            case GAP_ADDRESS_TYPE_RANDOM: return org.sputnikdev.bluetooth.manager.BluetoothAddressType.RANDOM;
+            default: return org.sputnikdev.bluetooth.manager.BluetoothAddressType.UNKNOWN;
+        }
+    }
+
+    @Override
+    public void enableServiceDataNotifications(Notification<Map<String, byte[]>> notification) {
+        serviceDataNotification = notification;
+    }
+
+    @Override
+    public void disableServiceDataNotifications() {
+        serviceDataNotification = null;
+    }
+
+    @Override
+    public void enableManufacturerDataNotifications(Notification<Map<Short, byte[]>> notification) {
+        manufacturerDataNotification = notification;
+    }
+
+    @Override
+    public void disableManufacturerDataNotifications() {
+        manufacturerDataNotification = null;
     }
 
     protected BluegigaService getService(URL url) {
@@ -287,7 +342,8 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     protected void establishConnection() {
         logger.info("Trying to connect: {}", url);
-        BlueGigaConnectionStatusEvent event = bgHandler.connect(url);
+        BlueGigaConnectionStatusEvent event = bgHandler.connect(url,
+                addressType != null ? addressType : BluetoothAddressType.UNKNOWN);
         logger.info("Connected: {}", url);
 
         connectionHandle = event.getConnection();
@@ -322,6 +378,10 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     private void handleScanEvent(BlueGigaScanResponseEvent scanEvent) {
         if (url.getDeviceAddress().equals(scanEvent.getSender())) {
+            rssi = (short) scanEvent.getRssi();
+            addressType = scanEvent.getAddressType();
+            lastDiscovered = Instant.now();
+            notifyRSSIChanged(rssi);
             if (scanEvent.getData() != null) {
                 Map<EirDataType, Object> eir = new EirPacket(scanEvent.getData()).getRecords();
 
@@ -343,18 +403,51 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
                 if (eir.containsKey(EirDataType.EIR_TXPOWER)) {
                     txPower = (short) (int) eir.get(EirDataType.EIR_TXPOWER);
                 }
-
-                if (eir.containsKey(EirDataType.EIR_SVC_DATA_UUID16)) {
-
+                if (handleServiceData(eir, EirDataType.EIR_SVC_DATA_UUID16)
+                        | handleServiceData(eir, EirDataType.EIR_SVC_DATA_UUID32)
+                        | handleServiceData(eir, EirDataType.EIR_SVC_DATA_UUID128)) {
+                    notifyServiceDataChanged();
                 }
 
                 if (eir.containsKey(EirDataType.EIR_MANUFACTURER_SPECIFIC)) {
-
+                    manufacturerData.putAll((Map<Short, byte[]>) eir.get(EirDataType.EIR_MANUFACTURER_SPECIFIC));
+                    notifyManufacturerDataChanged();
                 }
             }
-            rssi = (short) scanEvent.getRssi();
-            lastDiscovered = Instant.now();
-            notifyRSSIChanged(rssi);
+        }
+    }
+
+    private boolean handleServiceData(Map<EirDataType, Object> eir, EirDataType type) {
+        if (eir.containsKey(type)) {
+            Map<UUID, int[]> svcData = (Map<UUID, int[]>) eir.get(type);
+
+            svcData.forEach((uuid, data) ->
+                    serviceData.compute(getUUID(uuid), (k, v) -> BluegigaUtils.fromInts(data)));
+
+            return true;
+        }
+        return false;
+    }
+
+    private void notifyServiceDataChanged() {
+        Notification<Map<String, byte[]>> notification = serviceDataNotification;
+        if (notification != null) {
+            try {
+                notification.notify(new HashMap<>(serviceData));
+            } catch (Exception ex) {
+                logger.error("Error while executing service data changed notification", ex);
+            }
+        }
+    }
+
+    private void notifyManufacturerDataChanged() {
+        Notification<Map<Short, byte[]>> notification = manufacturerDataNotification;
+        if (notification != null) {
+            try {
+                notification.notify(new HashMap<>(manufacturerData));
+            } catch (Exception ex) {
+                logger.error("Error while executing manufacturer data changed notification", ex);
+            }
         }
     }
 
@@ -371,9 +464,6 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     private void servicesUnresolved() {
         if (servicesResolved) {
-            synchronized (services) {
-                services.clear();
-            }
             notifyServicesResolved(false);
             servicesResolved = false;
         }
