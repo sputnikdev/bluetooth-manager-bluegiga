@@ -101,7 +101,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public boolean connect() {
-        return bgHandler.runInSynchronizedContext(() -> {
+        boolean connected = bgHandler.runInSynchronizedContext(() -> {
             if (!isConnected()) {
 
                 // a workaround for a BGAPI bug when adapter becomes unstable when discovery is enabled within
@@ -113,23 +113,6 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
                 try {
                     establishConnection();
-
-                    if (!servicesCached) {
-                        discoverServices();
-                        servicesCached = true;
-                    }
-
-                    if (!characteristicCached) {
-                        discoverCharacteristics();
-                        characteristicCached = true;
-                    }
-
-                    if (!declarationsCached) {
-                        discoverDeclarations();
-                        declarationsCached = true;
-                    }
-
-                    serviceResolved();
                 } finally {
                     // restore discovery process if it was enabled
                     if (wasDiscovering) {
@@ -138,8 +121,34 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
                     }
                 }
             }
-            return true;
+            return isConnected();
         });
+        notifyConnected(connected);
+
+        boolean servicesResolved = bgHandler.runInSynchronizedContext(() -> {
+            if (isConnected()) {
+                if (!servicesCached) {
+                    discoverServices();
+                    servicesCached = true;
+                }
+
+                if (!characteristicCached) {
+                    discoverCharacteristics();
+                    characteristicCached = true;
+                }
+
+                if (!declarationsCached) {
+                    discoverDeclarations();
+                    declarationsCached = true;
+                }
+                return true;
+            }
+            return false;
+        });
+        if (servicesResolved) {
+            serviceResolved();
+        }
+        return connected && servicesResolved;
     }
 
     @Override
@@ -322,7 +331,6 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
         logger.info("Connected: {}", url);
 
         connectionHandle = event.getConnection();
-        notifyConnected(true);
     }
 
     protected void discoverServices() {
@@ -403,14 +411,14 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     private void servicesUnresolved() {
         if (servicesResolved) {
-            notifyServicesResolved(false);
             servicesResolved = false;
+            notifyServicesResolved(false);
         }
     }
 
     private void serviceResolved() {
-        notifyServicesResolved(true);
         servicesResolved = true;
+        notifyServicesResolved(true);
     }
 
     private void notifyRSSIChanged(short rssi) {
