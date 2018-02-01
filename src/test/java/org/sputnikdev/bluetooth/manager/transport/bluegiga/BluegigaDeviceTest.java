@@ -200,11 +200,11 @@ public class BluegigaDeviceTest {
         InOrder inOrder = Mockito.inOrder(bluegigaHandler);
         inOrder.verify(bluegigaHandler).isDiscovering();
         inOrder.verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.UNKNOWN);
+        inOrder.verify(bluegigaHandler).bgStopProcedure();
+        inOrder.verify(bluegigaHandler).bgStartScanning();
         inOrder.verify(bluegigaHandler).getServices(CONNECTION_HANDLE);
         inOrder.verify(bluegigaHandler).getCharacteristics(CONNECTION_HANDLE);
         inOrder.verify(bluegigaHandler).getDeclarations(CONNECTION_HANDLE);
-        inOrder.verify(bluegigaHandler).bgStopProcedure();
-        inOrder.verify(bluegigaHandler).bgStartScanning();
     }
 
     @Test

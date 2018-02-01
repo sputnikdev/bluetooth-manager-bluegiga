@@ -430,7 +430,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
             Map<UUID, int[]> svcData = (Map<UUID, int[]>) eir.get(type);
 
             svcData.forEach((uuid, data) ->
-                    serviceData.compute(getUUID(uuid), (k, v) -> BluegigaUtils.fromInts(data)));
+                    serviceData.compute(getUUID(uuid), (key, value) -> BluegigaUtils.fromInts(data)));
 
             return true;
         }
