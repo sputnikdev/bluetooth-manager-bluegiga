@@ -169,6 +169,8 @@ public class BluegigaAdapterTest {
 
         bluegigaAdapter.disablePoweredNotifications();
 
+        verify(bluegigaHandler, times(2)).checkAlive();
+
         verifyNoMoreInteractions(bluegigaHandler);
     }
 

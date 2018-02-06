@@ -44,6 +44,7 @@ import org.sputnikdev.bluetooth.manager.transport.Service;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,7 +83,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     private boolean servicesCached;
     private boolean characteristicCached;
     private boolean declarationsCached;
-    private final Map<URL, BluegigaService> services = new HashMap<>();
+    private final Map<URL, BluegigaService> services = new ConcurrentHashMap<>();
     // just a local cache, BlueGiga adapters do not support aliases
     private String alias;
     private Map<Short, byte[]> manufacturerData = new ConcurrentHashMap<>();
@@ -164,9 +165,9 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
                     bgHandler.disconnect(connectionHandle);
                 } finally {
                     connectionHandle = -1;
+                    servicesUnresolved();
+                    notifyConnected(false);
                 }
-                servicesUnresolved();
-                notifyConnected(false);
             }
             return true;
         });
@@ -214,7 +215,8 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public boolean isConnected() {
-        return bgHandler.isAlive() && connectionHandle >= 0;
+        bgHandler.checkAlive();
+        return connectionHandle >= 0;
     }
 
     @Override
@@ -244,9 +246,10 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public List<Service> getServices() {
-        synchronized (services) {
-            return new ArrayList<>(services.values());
+        if (!servicesResolved) {
+            return Collections.emptyList();
         }
+        return new ArrayList<>(services.values());
     }
 
     @Override
@@ -257,12 +260,10 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     @Override
     public void dispose() {
         disconnect();
-        synchronized (services) {
-            services.clear();
-            servicesCached = false;
-            characteristicCached = false;
-            declarationsCached = false;
-        }
+        services.clear();
+        servicesCached = false;
+        characteristicCached = false;
+        declarationsCached = false;
     }
 
     @Override
@@ -344,9 +345,10 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     }
 
     protected BluegigaService getService(URL url) {
-        synchronized (services) {
-            return services.get(url.getServiceURL());
+        if (!servicesResolved) {
+            return null;
         }
+        return services.get(url.getServiceURL());
     }
 
     protected void establishConnection() {
@@ -633,11 +635,9 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     }
 
     private BluegigaService getServiceByHandle(int handle) {
-        synchronized (services) {
-            return services.values().stream()
+        return services.values().stream()
                     .filter(service -> handle >= service.getHandleStart() && handle <= service.getHandleEnd())
                     .findFirst().orElse(null);
-        }
     }
 
 }

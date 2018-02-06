@@ -37,6 +37,8 @@ import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetConnection
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetConnectionsResponse;
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetInfoCommand;
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetInfoResponse;
+import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaHelloCommand;
+import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaHelloResponse;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.AttributeValueType;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BgApiResponse;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BluetoothAddressType;
@@ -57,6 +59,7 @@ import java.util.stream.Stream;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyLong;
@@ -116,11 +119,22 @@ public class BluegigaHandlerTest {
 
     @Test
     public void testIsAlive() throws Exception {
-        when(bgHandler.isAlive()).thenReturn(true);
+        assertFalse(handler.isAlive());
 
+        when(bgHandler.isAlive()).thenReturn(true);
+        assertFalse(handler.isAlive());
+
+        mockTransaction(BlueGigaHelloCommand.class, null);
+        assertFalse(handler.isAlive());
+
+        BlueGigaHelloResponse helloResponse = mock(BlueGigaHelloResponse.class);
+        mockTransaction(BlueGigaHelloCommand.class, helloResponse);
         assertTrue(handler.isAlive());
 
-        verify(bgHandler).isAlive();
+        when(bgHandler.sendTransaction(isA(BlueGigaHelloCommand.class), anyLong())).thenThrow(Exception.class);
+        assertFalse(handler.isAlive());
+
+        verify(bgHandler, times(5)).isAlive();
     }
 
     @Test

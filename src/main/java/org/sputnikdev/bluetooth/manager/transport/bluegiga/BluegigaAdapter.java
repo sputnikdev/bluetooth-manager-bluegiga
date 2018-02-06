@@ -21,7 +21,6 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
  */
 
 import com.zsmartsystems.bluetooth.bluegiga.BlueGigaEventListener;
-import com.zsmartsystems.bluetooth.bluegiga.BlueGigaException;
 import com.zsmartsystems.bluetooth.bluegiga.BlueGigaResponse;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaScanResponseEvent;
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetInfoResponse;
@@ -73,9 +72,7 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
 
     @Override
     public boolean isDiscovering() {
-        if (!bgHandler.isAlive()) {
-            throw new BlueGigaException("BlueGiga handler is dead.");
-        }
+        bgHandler.checkAlive();
         return discovering;
     }
 
@@ -124,25 +121,29 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
     @Override
     public void dispose() {
         bgHandler.removeEventListener(this);
-        bgHandler.runInSynchronizedContext(() -> {
+        try {
+            bgHandler.runInSynchronizedContext(() -> {
 
-            try {
-                stopDiscovery();
-            } catch (Exception ex) {
-                logger.warn("Could not stop discovery process", ex);
-            }
-
-            devices.values().forEach(device -> {
                 try {
-                    device.dispose();
+                    stopDiscovery();
                 } catch (Exception ex) {
-                    logger.warn("Could not dispose Bluegiga device", ex);
+                    logger.debug("Could not stop discovery process", ex.getMessage());
                 }
-            });
-            devices.clear();
 
-            bgHandler.dispose();
-        });
+                devices.values().forEach(device -> {
+                    try {
+                        device.dispose();
+                    } catch (Exception ex) {
+                        logger.debug("Could not dispose Bluegiga device", ex.getMessage());
+                    }
+                });
+                devices.clear();
+
+                bgHandler.dispose();
+            });
+        } catch (Exception ex) {
+            logger.debug("Error occurred while disposing an adapter {}", ex.getMessage());
+        }
     }
 
     @Override
@@ -172,6 +173,7 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
 
     @Override
     public boolean isPowered() {
+        bgHandler.checkAlive();
         return true;
     }
 

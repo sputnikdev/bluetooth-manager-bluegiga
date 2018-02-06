@@ -63,6 +63,7 @@ import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetConnection
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetConnectionsResponse;
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetInfoCommand;
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetInfoResponse;
+import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaHelloCommand;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.AttributeValueType;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BgApiResponse;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BluetoothAddressType;
@@ -91,7 +92,7 @@ import java.util.function.Supplier;
  */
 class BluegigaHandler implements BlueGigaEventListener {
 
-    private static final long DEFAULT_WAIT_TIME = 10000;
+    private static final long DEFAULT_WAIT_TIME = 20000;
 
     private final Logger logger = LoggerFactory.getLogger(BluegigaAdapter.class);
 
@@ -156,10 +157,6 @@ class BluegigaHandler implements BlueGigaEventListener {
 
     protected void removeEventListener(BlueGigaEventListener listener) {
         bgHandler.removeEventListener(listener);
-    }
-
-    protected boolean isAlive() {
-        return bgHandler.isAlive();
     }
 
     protected URL getAdapterAddress() {
@@ -284,9 +281,13 @@ class BluegigaHandler implements BlueGigaEventListener {
             if (bgHandler != null && bgHandler.isAlive()) {
                 try {
                     bgStopProcedure();
+                } catch (Exception ex) {
+                    logger.debug("Could not stop discovery: {}", ex.getMessage());
+                }
+                try {
                     closeAllConnections();
                 } catch (Exception ex) {
-                    logger.warn("Could not stop discovery or close all connections.", ex);
+                    logger.debug("Could not close all connections: {}", ex.getMessage());
                 }
             }
             closeBGHandler();
@@ -297,26 +298,29 @@ class BluegigaHandler implements BlueGigaEventListener {
         return DEFAULT_WAIT_TIME;
     }
 
+    protected boolean isAlive() {
+        synchronized (eventsCaptor) {
+            try {
+                return bgHandler.isAlive() && sendTransaction(new BlueGigaHelloCommand()) != null;
+            } catch (BlueGigaException ex) {
+                logger.debug("Error occurred while checking if BlueGiga handler is alive: {}", ex.getMessage());
+                return false;
+            }
+        }
+    }
+
+    protected void checkAlive() {
+        if (!isAlive()) {
+            throw new BluegigaException("BlueGiga handler is dead.");
+        }
+    }
+
     private BlueGigaResponse sendTransaction(BlueGigaCommand command) {
         try {
             return bgHandler.sendTransaction(command, eventWaitTimeout);
         } catch (Exception e) {
             closeBGHandler();
             throw new BlueGigaException("Fatal error in communication with BlueGiga adapter.", e);
-        }
-    }
-
-    private void closeBGHandler() {
-        if (bgHandler != null && bgHandler.isAlive()) {
-            bgHandler.close();
-        }
-
-        if (nrSerialPort != null) {
-            // Note: this will fail with a SIGSEGV error on OSX:
-            // Problematic frame: C  [librxtxSerial.jnilib+0x312f]  Java_gnu_io_RXTXPort_interruptEventLoop+0x6b
-            // It is a known issue of the librxtxSerial lib
-            nrSerialPort.disconnect();
-            nrSerialPort = null;
         }
     }
 
@@ -383,8 +387,8 @@ class BluegigaHandler implements BlueGigaEventListener {
      */
 
     private URL bgGetAdapterAddress() {
-        BlueGigaAddressGetResponse addressResponse = (BlueGigaAddressGetResponse) bgHandler
-                .sendTransaction(new BlueGigaAddressGetCommand());
+        BlueGigaAddressGetResponse addressResponse = (BlueGigaAddressGetResponse)
+                sendTransaction(new BlueGigaAddressGetCommand());
         if (addressResponse != null) {
             return new URL(BluegigaFactory.BLUEGIGA_PROTOCOL_NAME, addressResponse.getAddress(), null);
         }
@@ -556,6 +560,29 @@ class BluegigaHandler implements BlueGigaEventListener {
             throw new BluegigaException(String.format("Native resource exception %s", serialPortName), e);
         }  catch (UnsupportedCommOperationException e) {
             throw new BluegigaException(String.format("Generic serial port error %s", serialPortName), e);
+        }
+    }
+
+    private void closeBGHandler() {
+        if (bgHandler != null) {
+            bgHandler.close();
+        }
+        if (nrSerialPort != null) {
+            RXTXPort serialPort = nrSerialPort.getSerialPortInstance();
+            if (serialPort != null) {
+                try {
+                    serialPort.disableReceiveTimeout();
+                    serialPort.removeEventListener();
+                } catch (Exception ex) {
+                    logger.debug("Could not dispose serial port object: {}", ex.getMessage());
+                }
+            }
+            // Note: this will fail with a SIGSEGV error on OSX:
+            // Problematic frame: C  [librxtxSerial.jnilib+0x312f]  Java_gnu_io_RXTXPort_interruptEventLoop+0x6b
+            // It is a known issue of the librxtxSerial lib
+            nrSerialPort.disconnect();
+
+            nrSerialPort = null;
         }
     }
 
