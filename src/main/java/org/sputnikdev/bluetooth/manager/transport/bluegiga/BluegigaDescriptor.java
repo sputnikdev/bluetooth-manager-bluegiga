@@ -50,6 +50,7 @@ class BluegigaDescriptor implements Descriptor {
 
     @Override
     public byte[] readValue() {
+        logger.debug("Reading value: {}", url);
         BlueGigaAttributeValueEvent blueGigaAttributeValueEvent =
                 bgHandler.readCharacteristic(connectionHandle, descriptorHandle);
         return BluegigaUtils.fromInts(blueGigaAttributeValueEvent.getValue());
@@ -57,6 +58,7 @@ class BluegigaDescriptor implements Descriptor {
 
     @Override
     public boolean writeValue(byte[] bytes) {
+        logger.debug("Writing value: {}", url);
         int[] data = BluegigaUtils.fromBytes(bytes);
         BlueGigaProcedureCompletedEvent event = bgHandler.writeCharacteristic(connectionHandle, descriptorHandle, data);
         if (event.getResult() != BgApiResponse.SUCCESS) {

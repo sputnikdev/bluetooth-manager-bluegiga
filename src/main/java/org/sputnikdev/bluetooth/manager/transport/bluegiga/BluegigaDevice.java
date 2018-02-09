@@ -107,6 +107,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public boolean connect() {
+        logger.debug("Connecting: {}", url);
         boolean connected = bgHandler.runInSynchronizedContext(() -> {
             if (!isConnected()) {
 
@@ -129,36 +130,41 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
             }
             return isConnected();
         });
+        logger.debug("Connected {}. Resolving services: {}", connected, url);
         notifyConnected(connected);
 
-        boolean servicesResolved = bgHandler.runInSynchronizedContext(() -> {
-            if (isConnected()) {
-                if (!servicesCached) {
-                    discoverServices();
-                    servicesCached = true;
-                }
+        if (connected) {
+            boolean servicesResolved = bgHandler.runInSynchronizedContext(() -> {
+                if (isConnected()) {
+                    if (!servicesCached) {
+                        discoverServices();
+                        servicesCached = true;
+                    }
 
-                if (!characteristicCached) {
-                    discoverCharacteristics();
-                    characteristicCached = true;
-                }
+                    if (!characteristicCached) {
+                        discoverCharacteristics();
+                        characteristicCached = true;
+                    }
 
-                if (!declarationsCached) {
-                    discoverDeclarations();
-                    declarationsCached = true;
+                    if (!declarationsCached) {
+                        discoverDeclarations();
+                        declarationsCached = true;
+                    }
+                    return true;
                 }
-                return true;
+                return false;
+            });
+            if (servicesResolved) {
+                serviceResolved();
             }
-            return false;
-        });
-        if (servicesResolved) {
-            serviceResolved();
         }
+        logger.debug("Services resolved: {} / {}", servicesResolved, url);
         return connected && servicesResolved;
     }
 
     @Override
     public boolean disconnect() {
+        logger.debug("Disconnecting: {}", url);
         return bgHandler.runInSynchronizedContext(() -> {
             if (connectionHandle >= 0) {
                 try {
@@ -205,11 +211,13 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public void enableRSSINotifications(Notification<Short> notification) {
+        logger.debug("Enable RSSI notifications: {}", url);
         rssiNotification = notification;
     }
 
     @Override
     public void disableRSSINotifications() {
+        logger.debug("Disable RSSI notifications: {}", url);
         rssiNotification = null;
     }
 
@@ -221,11 +229,13 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public void enableConnectedNotifications(Notification<Boolean> notification) {
+        logger.debug("Enable connected notifications: {}", url);
         connectedNotification = notification;
     }
 
     @Override
     public void disableConnectedNotifications() {
+        logger.debug("Disable connected notifications: {}", url);
         this.connectedNotification = null;
     }
 
@@ -236,11 +246,13 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public void enableServicesResolvedNotifications(Notification<Boolean> notification) {
+        logger.debug("Enable service resolved notifications: {}", url);
         this.serviceResolvedNotification = notification;
     }
 
     @Override
     public void disableServicesResolvedNotifications() {
+        logger.debug("Disable service resolved notifications: {}", url);
         this.serviceResolvedNotification = null;
     }
 
@@ -259,11 +271,13 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public void dispose() {
+        logger.debug("Disposing device: {} / {}", url, this);
         disconnect();
         services.clear();
         servicesCached = false;
         characteristicCached = false;
         declarationsCached = false;
+        logger.debug("Device disposed: {}", url);
     }
 
     @Override
@@ -326,21 +340,25 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public void enableServiceDataNotifications(Notification<Map<String, byte[]>> notification) {
+        logger.debug("Enable service data notifications: {}", url);
         serviceDataNotification = notification;
     }
 
     @Override
     public void disableServiceDataNotifications() {
+        logger.debug("Disable service data notifications: {}", url);
         serviceDataNotification = null;
     }
 
     @Override
     public void enableManufacturerDataNotifications(Notification<Map<Short, byte[]>> notification) {
+        logger.debug("Enable manufacturer data notifications: {}", url);
         manufacturerDataNotification = notification;
     }
 
     @Override
     public void disableManufacturerDataNotifications() {
+        logger.debug("Disable manufacturer data notifications: {}", url);
         manufacturerDataNotification = null;
     }
 
@@ -352,34 +370,33 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     }
 
     protected void establishConnection() {
-        logger.info("Trying to connect: {}", url);
+        logger.debug("Trying to connect: {}", url);
         BlueGigaConnectionStatusEvent event = bgHandler.connect(url,
                 addressType != null ? addressType : BluetoothAddressType.UNKNOWN);
-        logger.info("Connected: {}", url);
-
+        logger.debug("Connected: {}", url);
         connectionHandle = event.getConnection();
     }
 
     protected void discoverServices() {
-        logger.info("Discovering services: {}", url);
+        logger.debug("Discovering services: {}", url);
         // discover services
         bgHandler.getServices(connectionHandle)
             .stream().map(this::convert).forEach(service -> services.put(service.getURL(), service));
-        logger.info("Services discovered: {}", services.size());
+        logger.debug("Services discovered: {}", services.size());
     }
 
     protected void discoverCharacteristics() {
-        logger.info("Discovering characteristics: {}", url);
+        logger.debug("Discovering characteristics: {}", url);
         // discover characteristics and their descriptors
         processAttributes(bgHandler.getCharacteristics(connectionHandle));
-        logger.info("Characteristics discovered");
+        logger.debug("Characteristics discovered: {}", url);
     }
 
     protected void discoverDeclarations() {
-        logger.info("Discovering declarations: {}", url);
+        logger.debug("Discovering declarations: {}", url);
         // discover characteristic properties (access flags)
         bgHandler.getDeclarations(connectionHandle).forEach(this::processDeclaration);
-        logger.info("Declarations discovered: {}", url);
+        logger.debug("Declarations discovered: {}", url);
     }
 
     protected int getConnectionHandle() {
@@ -388,6 +405,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     private void handleScanEvent(BlueGigaScanResponseEvent scanEvent) {
         if (url.getDeviceAddress().equals(scanEvent.getSender())) {
+            logger.trace("Advertising message received: {}", url);
             rssi = (short) scanEvent.getRssi();
             addressType = scanEvent.getAddressType();
             lastDiscovered = Instant.now();
@@ -420,6 +438,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
                 }
 
                 if (eir.containsKey(EirDataType.EIR_MANUFACTURER_SPECIFIC)) {
+                    logger.trace("Manufacturer data changed: {}", url);
                     manufacturerData.putAll((Map<Short, byte[]>) eir.get(EirDataType.EIR_MANUFACTURER_SPECIFIC));
                     notifyManufacturerDataChanged();
                 }
@@ -429,6 +448,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     private boolean handleServiceData(Map<EirDataType, Object> eir, EirDataType type) {
         if (eir.containsKey(type)) {
+            logger.trace("Service data changed: {} / {}", url, type);
             Map<UUID, int[]> svcData = (Map<UUID, int[]>) eir.get(type);
 
             svcData.forEach((uuid, data) ->
@@ -463,7 +483,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     private void handleDisconnectedEvent(BlueGigaDisconnectedEvent event) {
         if (connectionHandle == event.getConnection()) {
-            logger.info("Disconnection even received {}. Reason: {}.", url, event.getReason());
+            logger.debug("Disconnection even received {}. Reason: {}.", url, event.getReason());
             if (event.getReason() != BgApiResponse.CONNECTION_TERMINATED_BY_LOCAL_HOST) {
                 servicesUnresolved();
                 notifyConnected(false);
@@ -565,16 +585,18 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
                 if (shortUUID >= 0x2900 && shortUUID <= 0x290F) {
                     // Descriptors (https://www.bluetooth.com/specifications/gatt/descriptors)
                     if (characteristic == null) {
-                        logger.warn("Came across a descriptor, but there is not any characteristic so far... "
+                        logger.error("Came across a descriptor, but there is not any characteristic so far... "
                                 + "Characteristic should go first followed by its descriptors. {}",
                                 attributeUUID);
                         throw new IllegalStateException("A characteristic was expected to go first");
                     }
+                    logger.debug("Create a new descriptor: {}", attributeURL);
                     BluegigaDescriptor descriptor = new BluegigaDescriptor(bgHandler, attributeURL,
                             connectionHandle, event.getChrHandle());
                     characteristic.addDescriptor(descriptor);
                 } else {
                     // Characteristics
+                    logger.debug("Create a new characteristic: {}", attributeURL);
                     characteristic = new BluegigaCharacteristic(bgHandler, attributeURL,
                             connectionHandle, event.getChrHandle());
                     bluegigaService.addCharacteristic(characteristic);

@@ -78,18 +78,22 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
 
     @Override
     public void enableDiscoveringNotifications(Notification<Boolean> notification) {
+        logger.debug("Enable discovering notifications: {}", getURL());
         discoveringNotification = notification;
     }
 
     @Override
     public void disableDiscoveringNotifications() {
+        logger.debug("Disable discovering notifications: {}", getURL());
         discoveringNotification = null;
     }
 
     @Override
     public boolean startDiscovery() {
+        logger.debug("Starting discovery: {}", getURL());
         boolean discoveryStatus = bgHandler.bgStartScanning();
         if (!discovering && discoveryStatus) {
+            logger.debug("Discovery successfully started: {}", getURL());
             discovering = true;
             notifyDiscovering(true);
         }
@@ -98,6 +102,7 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
 
     @Override
     public boolean stopDiscovery() {
+        logger.debug("Stopping discovery: {}", getURL());
         if (discovering) {
             discovering = false;
             notifyDiscovering(false);
@@ -120,6 +125,7 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
 
     @Override
     public void dispose() {
+        logger.debug("Disposing adapter: {}", getURL());
         bgHandler.removeEventListener(this);
         try {
             bgHandler.runInSynchronizedContext(() -> {
@@ -127,14 +133,16 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
                 try {
                     stopDiscovery();
                 } catch (Exception ex) {
-                    logger.debug("Could not stop discovery process", ex.getMessage());
+                    logger.debug("Error occurred while stopping discovery process: {} : ", getURL(), ex.getMessage());
                 }
 
                 devices.values().forEach(device -> {
                     try {
+                        logger.debug("Disposing device: {}", device.getURL());
                         device.dispose();
                     } catch (Exception ex) {
-                        logger.debug("Could not dispose Bluegiga device", ex.getMessage());
+                        logger.debug("Error occurred while disposing device: {} : {}",
+                                device.getURL(), ex.getMessage());
                     }
                 });
                 devices.clear();
@@ -142,8 +150,9 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
                 bgHandler.dispose();
             });
         } catch (Exception ex) {
-            logger.debug("Error occurred while disposing an adapter {}", ex.getMessage());
+            logger.debug("Error occurred while disposing adapter: {} : {}", getURL(), ex.getMessage());
         }
+        logger.debug("Adapter disposed: {}", getURL());
     }
 
     @Override
@@ -157,7 +166,7 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
                     devices.put(deviceURL, bluegigaDevice);
                     // let the device to set its name and RSSI
                     bluegigaDevice.bluegigaEventReceived(scanEvent);
-                    logger.debug("Discovered: {} ({}) {} ", bluegigaDevice.getURL().getDeviceAddress(),
+                    logger.trace("Discovered: {} ({}) {} ", bluegigaDevice.getURL().getDeviceAddress(),
                             bluegigaDevice.getName(), bluegigaDevice.getRSSI());
                 }
             }
@@ -194,9 +203,11 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
     }
 
     protected BluegigaDevice getDevice(URL url) {
+        logger.debug("Device requested {}", url);
         URL deviceURL = url.getDeviceURL();
         synchronized (devices) {
             if (devices.containsKey(deviceURL)) {
+                logger.debug("Device exists: {}", deviceURL);
                 return devices.get(deviceURL);
             } else {
                 BluegigaDevice bluegigaDevice = createDevice(deviceURL);
@@ -207,6 +218,7 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
     }
 
     protected BluegigaDevice createDevice(URL address) {
+        logger.debug("Creating a new device: {}", address);
         return new BluegigaDevice(bgHandler, address);
     }
 
@@ -231,7 +243,7 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
             try {
                 notification.notify(isDiscovering);
             } catch (Exception ex) {
-                logger.error("Could not notify discovering notification", ex);
+                logger.error("Error occurred in discovering notification", ex);
             }
         }
     }

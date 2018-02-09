@@ -84,6 +84,7 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
 
     @Override
     public byte[] readValue() {
+        logger.debug("Reading value: {}", url);
         BlueGigaAttributeValueEvent blueGigaAttributeValueEvent =
                 bgHandler.readCharacteristic(connectionHandle, characteristicHandle);
         return BluegigaUtils.fromInts(blueGigaAttributeValueEvent.getValue());
@@ -91,6 +92,7 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
 
     @Override
     public boolean writeValue(byte[] bytes) {
+        logger.debug("Writing value: {}", url);
         int[] data = BluegigaUtils.fromBytes(bytes);
         if (flags.contains(CharacteristicAccessType.WRITE_WITHOUT_RESPONSE)) {
             return bgHandler.writeCharacteristicWithoutResponse(connectionHandle, characteristicHandle, data);
@@ -102,12 +104,14 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
 
     @Override
     public void enableValueNotifications(Notification<byte[]> notification) {
+        logger.debug("Enable value notifications: {}", url);
         toggleNotification(true);
         valueNotification = notification;
     }
 
     @Override
     public void disableValueNotifications() {
+        logger.debug("Disable value notifications: {}", url);
         toggleNotification(false);
         valueNotification = null;
     }
@@ -127,10 +131,11 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
             BlueGigaAttributeValueEvent attributeValueEvent = (BlueGigaAttributeValueEvent) event;
             if (attributeValueEvent.getConnection() == connectionHandle
                 && attributeValueEvent.getAttHandle() == characteristicHandle) {
+                logger.trace("Notification received: {}", url);
                 try {
                     notification.notify(BluegigaUtils.fromInts(attributeValueEvent.getValue()));
                 } catch (Exception ex) {
-                    logger.error("Could not notify value changed notification", ex);
+                    logger.error("Error occurred in changed notification", ex);
                 }
             }
         }
@@ -157,6 +162,7 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
     }
 
     protected void toggleNotification(boolean enabled) {
+        logger.debug("Toggling notification: {} / {}", url, enabled);
         if (!(flags.contains(CharacteristicAccessType.NOTIFY) || flags.contains(CharacteristicAccessType.INDICATE))) {
             logger.debug("The characteristic {} does not support neither notifications nor indications; flags: {}.",
                     url, flags.stream().map(Enum::toString).collect(Collectors.joining(", ")));
