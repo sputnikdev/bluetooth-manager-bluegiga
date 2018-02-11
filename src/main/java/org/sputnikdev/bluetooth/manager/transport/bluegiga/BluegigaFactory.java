@@ -118,7 +118,7 @@ public class BluegigaFactory implements BluetoothObjectFactory {
         logger.debug("Device requested: {}", url);
         BluegigaDevice device = Optional.ofNullable(getAdapter(url.getAdapterURL()))
             .map(adapter -> adapter.getDevice(url.getDeviceURL())).orElse(null);
-        logger.debug("Device returned: {} / {}", url, device);
+        logger.debug("Device returned: {} / {}", url, device != null ? Integer.toHexString(device.hashCode()) : null);
         return device;
     }
 
@@ -138,8 +138,8 @@ public class BluegigaFactory implements BluetoothObjectFactory {
         discoverAdapters();
         List<DiscoveredAdapter> discovered = adapters.values().stream().map(BluegigaFactory::convert)
                 .collect(Collectors.toList());
-        logger.debug("Discovered adapters: {}", discovered.stream().map(DiscoveredAdapter::getURL).map(Object::toString)
-                .collect(Collectors.joining(", ")));
+        logger.debug("Discovered adapters: [{}]", discovered.stream().map(DiscoveredAdapter::getURL)
+                .map(Object::toString).collect(Collectors.joining(", ")));
         return discovered;
     }
 
@@ -149,7 +149,7 @@ public class BluegigaFactory implements BluetoothObjectFactory {
         List<DiscoveredDevice> discovered = adapters.values().stream().filter(BluegigaAdapter::isAlive)
                 .flatMap(adapter -> adapter.getDevices().stream())
                 .map(BluegigaFactory::convert).collect(Collectors.toList());
-        logger.debug("Discovered adapters: {}", discovered.stream().map(DiscoveredDevice::getURL).map(Object::toString)
+        logger.debug("Discovered devices: [{}]", discovered.stream().map(DiscoveredDevice::getURL).map(Object::toString)
                 .collect(Collectors.joining(", ")));
         return discovered;
     }
@@ -189,7 +189,7 @@ public class BluegigaFactory implements BluetoothObjectFactory {
      * Disposes the factory.
      */
     public void dispose() {
-        logger.debug("Disposing factory");
+        logger.debug("Disposing factory: {}", Integer.toHexString(hashCode()));
         adapters.values().forEach(adapter -> {
             try {
                 adapter.dispose();
@@ -198,13 +198,15 @@ public class BluegigaFactory implements BluetoothObjectFactory {
             }
         });
         adapters.clear();
-        logger.debug("Factory disposed");
+        logger.debug("Factory disposed: {}", Integer.toHexString(hashCode()));
     }
 
     protected BluegigaAdapter createAdapter(String portName) {
-        logger.debug("Creating a new adapter for port: {}", portName);
+        logger.debug("Creating new bluegiga handler for port: {}", portName);
         BluegigaHandler bluegigaHandler = BluegigaHandler.create(portName);
         try {
+            logger.debug("Creating a new adapter for port: {} / {}", portName,
+                    bluegigaHandler.getAdapterAddress());
             BluegigaAdapter bluegigaAdapter = BluegigaAdapter.create(bluegigaHandler);
             bluegigaHandler.addHandlerListener(exception -> {
                 logger.debug("An exception occurred in blugiga handler: {}", exception.getMessage());
@@ -212,6 +214,8 @@ public class BluegigaFactory implements BluetoothObjectFactory {
                     removeAdapter(bluegigaAdapter);
                 }
             });
+            logger.debug("Adapter created: {} / {}", bluegigaAdapter.getURL(),
+                    Integer.toHexString(bluegigaAdapter.hashCode()));
             return bluegigaAdapter;
         } catch (Exception ex) {
             logger.warn("Could not create a new adapter for port: " + portName, ex);
@@ -230,11 +234,11 @@ public class BluegigaFactory implements BluetoothObjectFactory {
             Set<String> discoveredPorts = NRSerialPort.getAvailableSerialPorts().stream()
                 .filter(this::matchPort)
                 .collect(Collectors.toSet());
-            logger.debug("Discovered ports: {}", discoveredPorts.stream().collect(Collectors.joining(", ")));
+            logger.debug("Discovered ports: [{}]", discoveredPorts.stream().collect(Collectors.joining(", ")));
 
             Set<String> usedPorts = adapters.values().stream().map(BluegigaAdapter::getPortName)
                 .collect(Collectors.toSet());
-            logger.debug("Ports already in use: {}", usedPorts.stream().collect(Collectors.joining(", ")));
+            logger.debug("Ports already in use: [{}]", usedPorts.stream().collect(Collectors.joining(", ")));
 
             /*
             Unfortunately RXTX driver works in different way in Linux, i.e. when a port gets opened, then it disappears
@@ -258,7 +262,7 @@ public class BluegigaFactory implements BluetoothObjectFactory {
             Map<URL, BluegigaAdapter> newAdapters = discoveredPorts.stream().filter(p -> !usedPorts.contains(p))
                 .map(this::tryToCreateAdapter).filter(Objects::nonNull)
                 .collect(Collectors.toMap(BluegigaAdapter::getURL, Function.identity()));
-            logger.debug("New adapters: {}", newAdapters.keySet().stream().map(Object::toString)
+            logger.debug("New adapters: [{}]", newAdapters.keySet().stream().map(Object::toString)
                     .collect(Collectors.joining(", ")));
             // clean up stale objects
             newAdapters.forEach((key, adapter) -> {

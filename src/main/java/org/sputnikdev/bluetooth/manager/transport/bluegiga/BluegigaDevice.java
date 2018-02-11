@@ -271,7 +271,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public void dispose() {
-        logger.debug("Disposing device: {} / {}", url, this);
+        logger.debug("Disposing device: {} / {}", url, Integer.toHexString(hashCode()));
         disconnect();
         services.clear();
         servicesCached = false;

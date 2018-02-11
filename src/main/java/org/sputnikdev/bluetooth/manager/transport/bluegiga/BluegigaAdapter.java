@@ -133,7 +133,8 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
                 try {
                     stopDiscovery();
                 } catch (Exception ex) {
-                    logger.debug("Error occurred while stopping discovery process: {} : ", getURL(), ex.getMessage());
+                    logger.debug("Error occurred while stopping discovery process: {} : {} ",
+                            getURL(), ex.getMessage());
                 }
 
                 devices.values().forEach(device -> {
@@ -162,11 +163,12 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
             synchronized (devices) {
                 URL deviceURL = getURL().copyWithDevice(scanEvent.getSender());
                 if (!devices.containsKey(deviceURL)) {
+                    logger.debug("New device discovered: {}", deviceURL);
                     BluegigaDevice bluegigaDevice = createDevice(deviceURL);
                     devices.put(deviceURL, bluegigaDevice);
                     // let the device to set its name and RSSI
                     bluegigaDevice.bluegigaEventReceived(scanEvent);
-                    logger.trace("Discovered: {} ({}) {} ", bluegigaDevice.getURL().getDeviceAddress(),
+                    logger.debug("Created new device: {} ({}) {} ", bluegigaDevice.getURL().getDeviceAddress(),
                             bluegigaDevice.getName(), bluegigaDevice.getRSSI());
                 }
             }
@@ -203,7 +205,7 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
     }
 
     protected BluegigaDevice getDevice(URL url) {
-        logger.debug("Device requested {}", url);
+        logger.debug("Device requested: {}", url);
         URL deviceURL = url.getDeviceURL();
         synchronized (devices) {
             if (devices.containsKey(deviceURL)) {
@@ -219,7 +221,9 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
 
     protected BluegigaDevice createDevice(URL address) {
         logger.debug("Creating a new device: {}", address);
-        return new BluegigaDevice(bgHandler, address);
+        BluegigaDevice device = new BluegigaDevice(bgHandler, address);
+        logger.debug("Device created: {} / {}", address, Integer.toHexString(device.hashCode()));
+        return device;
     }
 
     protected static BluegigaAdapter create(BluegigaHandler bluegigaHandler) {
