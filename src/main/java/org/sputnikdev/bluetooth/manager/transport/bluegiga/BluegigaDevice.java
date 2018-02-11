@@ -165,18 +165,19 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     @Override
     public boolean disconnect() {
         logger.debug("Disconnecting: {}", url);
-        return bgHandler.runInSynchronizedContext(() -> {
+        boolean result = bgHandler.runInSynchronizedContext(() -> {
             if (connectionHandle >= 0) {
                 try {
                     bgHandler.disconnect(connectionHandle);
                 } finally {
                     connectionHandle = -1;
-                    servicesUnresolved();
-                    notifyConnected(false);
                 }
             }
             return true;
         });
+        servicesUnresolved();
+        notifyConnected(false);
+        return result;
     }
 
     @Override
