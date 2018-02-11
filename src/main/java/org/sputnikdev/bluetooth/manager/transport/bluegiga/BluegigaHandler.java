@@ -94,7 +94,7 @@ class BluegigaHandler implements BlueGigaEventListener {
 
     private static final long DEFAULT_WAIT_TIME = 20000;
 
-    private final Logger logger = LoggerFactory.getLogger(BluegigaAdapter.class);
+    private final Logger logger = LoggerFactory.getLogger(BluegigaHandler.class);
 
     private static final int ACTIVE_SCAN_INTERVAL = 0x40;
     private static final int ACTIVE_SCAN_WINDOW = 0x20;
