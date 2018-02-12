@@ -80,9 +80,6 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     private int bluetoothClass;
     private boolean bleEnabled;
     private boolean servicesResolved;
-    private boolean servicesCached;
-    private boolean characteristicCached;
-    private boolean declarationsCached;
     private final Map<URL, BluegigaService> services = new ConcurrentHashMap<>();
     // just a local cache, BlueGiga adapters do not support aliases
     private String alias;
@@ -136,20 +133,9 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
         if (connected) {
             boolean servicesResolved = bgHandler.runInSynchronizedContext(() -> {
                 if (isConnected()) {
-                    if (!servicesCached) {
-                        discoverServices();
-                        servicesCached = true;
-                    }
-
-                    if (!characteristicCached) {
-                        discoverCharacteristics();
-                        characteristicCached = true;
-                    }
-
-                    if (!declarationsCached) {
-                        discoverDeclarations();
-                        declarationsCached = true;
-                    }
+                    discoverServices();
+                    discoverCharacteristics();
+                    discoverDeclarations();
                     return true;
                 }
                 return false;
@@ -224,8 +210,17 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public boolean isConnected() {
-        bgHandler.checkAlive();
-        return connectionHandle >= 0;
+        if (connectionHandle == -1) {
+            return false;
+        }
+        BlueGigaConnectionStatusEvent connectionStatusEvent = bgHandler.getConnectionStatus(connectionHandle);
+        if (url.getDeviceAddress().equalsIgnoreCase(connectionStatusEvent.getAddress())) {
+            return true;
+        } else {
+            throw new BluegigaException("Inconsistent connection state. "
+                    + "Most likely disconnection event has been missed: " + url + " : "
+                    + connectionStatusEvent.getAddress());
+        }
     }
 
     @Override
@@ -275,9 +270,6 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
         logger.debug("Disposing device: {} / {}", url, Integer.toHexString(hashCode()));
         disconnect();
         services.clear();
-        servicesCached = false;
-        characteristicCached = false;
-        declarationsCached = false;
         logger.debug("Device disposed: {}", url);
     }
 
@@ -494,10 +486,11 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     }
 
     private void servicesUnresolved() {
+        services.clear();
         if (servicesResolved) {
-            servicesResolved = false;
             notifyServicesResolved(false);
         }
+        servicesResolved = false;
     }
 
     private void serviceResolved() {

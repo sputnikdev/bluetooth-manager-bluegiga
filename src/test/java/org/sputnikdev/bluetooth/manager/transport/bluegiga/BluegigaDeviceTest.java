@@ -116,6 +116,8 @@ public class BluegigaDeviceTest {
         declarations.add(mockDeclarationEvent(4, BATTERY_LEVEL_CHARACTERISTIC_DECLARATION));
         when(bluegigaHandler.getDeclarations(CONNECTION_HANDLE)).thenReturn(declarations);
 
+        when(bluegigaHandler.getConnectionStatus(CONNECTION_HANDLE)).thenReturn(connectionStatusEvent);
+
         verify(bluegigaHandler).addEventListener(bluegigaDevice);
 
         bluegigaDevice = spy(bluegigaDevice);
@@ -303,13 +305,15 @@ public class BluegigaDeviceTest {
 
     @Test
     public void testIsConnected() {
-
         when(bluegigaHandler.disconnect(CONNECTION_HANDLE)).thenReturn(mock(BlueGigaDisconnectedEvent.class));
 
         assertFalse(bluegigaDevice.isConnected());
 
         assertTrue(bluegigaDevice.connect());
         assertTrue(bluegigaDevice.isConnected());
+
+        when(connectionStatusEvent.getAddress()).thenReturn("wrong address");
+        assertFalse(bluegigaDevice.isConnected());
 
         assertTrue(bluegigaDevice.disconnect());
         assertFalse(bluegigaDevice.isConnected());
@@ -503,6 +507,7 @@ public class BluegigaDeviceTest {
     private BlueGigaConnectionStatusEvent mockConnectionStatusEvent() {
         BlueGigaConnectionStatusEvent event = mock(BlueGigaConnectionStatusEvent.class);
         when(event.getConnection()).thenReturn(CONNECTION_HANDLE);
+        when(event.getAddress()).thenReturn(DEVICE_URL.getDeviceAddress());
         when(bluegigaHandler.connect(DEVICE_URL, BluetoothAddressType.UNKNOWN)).thenReturn(event);
         return event;
     }
