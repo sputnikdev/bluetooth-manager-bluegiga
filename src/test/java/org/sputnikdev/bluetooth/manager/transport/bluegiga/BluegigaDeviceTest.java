@@ -312,15 +312,25 @@ public class BluegigaDeviceTest {
         assertTrue(bluegigaDevice.connect());
         assertTrue(bluegigaDevice.isConnected());
 
-        when(connectionStatusEvent.getAddress()).thenReturn("wrong address");
-        assertFalse(bluegigaDevice.isConnected());
-
         assertTrue(bluegigaDevice.disconnect());
         assertFalse(bluegigaDevice.isConnected());
 
         verify(connectionStatusEvent).getConnection();
         verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.UNKNOWN);
         verify(bluegigaHandler).disconnect(CONNECTION_HANDLE);
+    }
+
+    @Test(expected = BluegigaException.class)
+    public void testIsConnectedInconsistency() {
+        when(bluegigaHandler.disconnect(CONNECTION_HANDLE)).thenReturn(mock(BlueGigaDisconnectedEvent.class));
+
+        assertFalse(bluegigaDevice.isConnected());
+
+        assertTrue(bluegigaDevice.connect());
+        assertTrue(bluegigaDevice.isConnected());
+
+        when(connectionStatusEvent.getAddress()).thenReturn("wrong address");
+        assertFalse(bluegigaDevice.isConnected());
     }
 
     @Test
