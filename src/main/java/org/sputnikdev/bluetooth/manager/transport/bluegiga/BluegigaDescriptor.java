@@ -73,9 +73,4 @@ class BluegigaDescriptor implements Descriptor {
         return url;
     }
 
-    @Override
-    public void dispose() {
-        // do nothing
-    }
-
 }

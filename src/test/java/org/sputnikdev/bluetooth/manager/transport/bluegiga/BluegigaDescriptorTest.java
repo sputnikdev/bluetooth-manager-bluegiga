@@ -77,9 +77,4 @@ public class BluegigaDescriptorTest {
         assertEquals(DESCRIPTOR_URL, descriptor.getURL());
     }
 
-    @Test
-    public void dispose() throws Exception {
-        descriptor.dispose();
-    }
-
 }

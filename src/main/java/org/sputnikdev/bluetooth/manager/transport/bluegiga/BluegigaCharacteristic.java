@@ -122,9 +122,6 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
     }
 
     @Override
-    public void dispose() { /* do nothing */ }
-
-    @Override
     public void bluegigaEventReceived(BlueGigaResponse event) {
         Notification<byte[]> notification = valueNotification;
         if (notification != null && event instanceof BlueGigaAttributeValueEvent) {

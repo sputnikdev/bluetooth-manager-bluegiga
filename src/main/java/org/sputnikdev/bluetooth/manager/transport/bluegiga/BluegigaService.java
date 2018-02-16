@@ -57,9 +57,6 @@ class BluegigaService implements Service {
         return url;
     }
 
-    @Override
-    public void dispose() { /* do nothing */ }
-
     protected void addCharacteristic(BluegigaCharacteristic characteristic) {
         synchronized (characteristics) {
             characteristics.put(characteristic.getURL(), characteristic);

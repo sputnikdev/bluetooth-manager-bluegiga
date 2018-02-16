@@ -123,38 +123,6 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
         return bgHandler.getAdapterAddress();
     }
 
-    @Override
-    public void dispose() {
-        logger.debug("Disposing adapter: {}", getURL());
-        bgHandler.removeEventListener(this);
-        try {
-            bgHandler.runInSynchronizedContext(() -> {
-
-                try {
-                    stopDiscovery();
-                } catch (Exception ex) {
-                    logger.debug("Error occurred while stopping discovery process: {} : {} ",
-                            getURL(), ex.getMessage());
-                }
-
-                devices.values().forEach(device -> {
-                    try {
-                        logger.debug("Disposing device: {}", device.getURL());
-                        device.dispose();
-                    } catch (Exception ex) {
-                        logger.debug("Error occurred while disposing device: {} : {}",
-                                device.getURL(), ex.getMessage());
-                    }
-                });
-                devices.clear();
-
-                bgHandler.dispose();
-            });
-        } catch (Exception ex) {
-            logger.debug("Error occurred while disposing adapter: {} : {}", getURL(), ex.getMessage());
-        }
-        logger.debug("Adapter disposed: {}", getURL());
-    }
 
     @Override
     public void bluegigaEventReceived(BlueGigaResponse event) {
@@ -234,6 +202,51 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
 
     protected String getPortName() {
         return bgHandler.getPortName();
+    }
+
+    protected void dispose() {
+        logger.debug("Disposing adapter: {}", getURL());
+        bgHandler.removeEventListener(this);
+        try {
+            bgHandler.runInSynchronizedContext(() -> {
+
+                try {
+                    stopDiscovery();
+                } catch (Exception ex) {
+                    logger.debug("Error occurred while stopping discovery process: {} : {} ",
+                            getURL(), ex.getMessage());
+                }
+
+                devices.values().forEach(device -> {
+                    try {
+                        logger.debug("Disposing device: {}", device.getURL());
+                        device.dispose();
+                    } catch (Exception ex) {
+                        logger.debug("Error occurred while disposing device: {} : {}",
+                                device.getURL(), ex.getMessage());
+                    }
+                });
+                devices.clear();
+
+                bgHandler.dispose();
+            });
+        } catch (Exception ex) {
+            logger.debug("Error occurred while disposing adapter: {} : {}", getURL(), ex.getMessage());
+        }
+        logger.debug("Adapter disposed: {}", getURL());
+    }
+
+    protected void disposeDevice(URL url) {
+        logger.warn("Disposing device: {}", url);
+        BluegigaDevice removed = devices.computeIfPresent(url, (key, device) -> {
+            try {
+                device.dispose();
+            } catch (Exception ex) {
+                logger.warn("Error occurred while disposing device: {} : {}", device.getURL(), ex.getMessage());
+            }
+            return null;
+        });
+        logger.debug("Device disposed: {} : {} ", url, removed == null);
     }
 
     private void init() {

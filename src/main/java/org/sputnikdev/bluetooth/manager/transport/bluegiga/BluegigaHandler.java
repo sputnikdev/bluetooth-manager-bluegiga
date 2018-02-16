@@ -57,6 +57,7 @@ import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaEndProcedureResp
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaSetModeCommand;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaSetModeResponse;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaSetScanParametersCommand;
+import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaSetScanParametersResponse;
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaAddressGetCommand;
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaAddressGetResponse;
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetConnectionsCommand;
@@ -64,6 +65,9 @@ import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetConnection
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetInfoCommand;
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetInfoResponse;
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaHelloCommand;
+import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaHelloResponse;
+import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaResetCommand;
+import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaResetResponse;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.AttributeValueType;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BgApiResponse;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BluetoothAddressType;
@@ -84,6 +88,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -92,7 +97,7 @@ import java.util.function.Supplier;
  */
 class BluegigaHandler implements BlueGigaEventListener {
 
-    private static final long DEFAULT_WAIT_TIME = 20000;
+    private static final long DEFAULT_WAIT_TIME = 10000;
 
     private final Logger logger = LoggerFactory.getLogger(BluegigaHandler.class);
 
@@ -231,7 +236,7 @@ class BluegigaHandler implements BlueGigaEventListener {
 
     protected BlueGigaGetInfoResponse bgGetInfo() {
         synchronized (eventsCaptor) {
-            return (BlueGigaGetInfoResponse) sendTransaction(new BlueGigaGetInfoCommand());
+            return sendTransaction(new BlueGigaGetInfoCommand(), BlueGigaGetInfoResponse.class);
         }
     }
 
@@ -244,11 +249,11 @@ class BluegigaHandler implements BlueGigaEventListener {
             scanCommand.setActiveScanning(true);
             scanCommand.setScanInterval(ACTIVE_SCAN_INTERVAL);
             scanCommand.setScanWindow(ACTIVE_SCAN_WINDOW);
-            sendTransaction(scanCommand);
+            sendTransaction(scanCommand, BlueGigaSetScanParametersResponse.class);
 
             BlueGigaDiscoverCommand discoverCommand = new BlueGigaDiscoverCommand();
             discoverCommand.setMode(GapDiscoverMode.GAP_DISCOVER_OBSERVATION);
-            BlueGigaDiscoverResponse response = (BlueGigaDiscoverResponse) sendTransaction(discoverCommand);
+            BlueGigaDiscoverResponse response = sendTransaction(discoverCommand, BlueGigaDiscoverResponse.class);
             discovering = response.getResult() == BgApiResponse.SUCCESS;
             return discovering;
         }
@@ -258,14 +263,14 @@ class BluegigaHandler implements BlueGigaEventListener {
         synchronized (eventsCaptor) {
             BlueGigaGetRssiCommand rssiCommand = new BlueGigaGetRssiCommand();
             rssiCommand.setConnection(connectionHandle);
-            return (short) ((BlueGigaGetRssiResponse) sendTransaction(rssiCommand)).getRssi();
+            return (short) sendTransaction(rssiCommand, BlueGigaGetRssiResponse.class).getRssi();
         }
     }
 
     protected boolean bgStopProcedure() {
         synchronized (eventsCaptor) {
-            BlueGigaEndProcedureResponse response = (BlueGigaEndProcedureResponse)
-                sendTransaction(new BlueGigaEndProcedureCommand());
+            BlueGigaEndProcedureResponse response =
+                    sendTransaction(new BlueGigaEndProcedureCommand(), BlueGigaEndProcedureResponse.class);
             discovering = false;
             return response.getResult() == BgApiResponse.SUCCESS;
         }
@@ -301,9 +306,10 @@ class BluegigaHandler implements BlueGigaEventListener {
     protected boolean isAlive() {
         synchronized (eventsCaptor) {
             try {
-                return bgHandler.isAlive() && sendTransaction(new BlueGigaHelloCommand()) != null;
+                return bgHandler.isAlive()
+                        && sendTransaction(new BlueGigaHelloCommand(), BlueGigaHelloResponse.class) != null;
             } catch (BlueGigaException ex) {
-                logger.debug("Error occurred while checking if BlueGiga handler is alive: {}", ex.getMessage());
+                logger.warn("Error occurred while checking if BlueGiga handler is alive: {}", ex.getMessage());
                 return false;
             }
         }
@@ -315,10 +321,22 @@ class BluegigaHandler implements BlueGigaEventListener {
         }
     }
 
-    private BlueGigaResponse sendTransaction(BlueGigaCommand command) {
+    private <T extends BlueGigaResponse> T sendTransaction(BlueGigaCommand command, Class<T> expected) {
         try {
-            return bgHandler.sendTransaction(command, eventWaitTimeout);
+            return bgHandler.sendTransaction(command, expected, eventWaitTimeout);
+        } catch (TimeoutException timeout) {
+            logger.warn("Timeout has happened while sending a transaction: {}", command.getClass().getSimpleName());
+            try {
+                return bgHandler.sendTransaction(command, expected, eventWaitTimeout);
+            } catch (Exception timeout2) {
+                logger.warn("Timeout has happened second time, giving up: {}", command.getClass().getSimpleName());
+                closeBGHandler();
+                throw new BlueGigaException("Bluegiga adapter does not respond", timeout2);
+            }
         } catch (Exception e) {
+            logger.warn("Error occurred while sending a transaction: {} : {} : {}",
+                    command.getClass().getSimpleName(), e.getClass().getSimpleName(), e.getMessage());
+
             closeBGHandler();
             throw new BlueGigaException("Fatal error in communication with BlueGiga adapter.", e);
         }
@@ -332,7 +350,13 @@ class BluegigaHandler implements BlueGigaEventListener {
             eventsCaptor.setCompletedEventType(completedEventType);
             eventsCaptor.setCompletionPredicate(completionPredicate);
             BgApiResponse response = initialCommand.get();
-            if (response == BgApiResponse.SUCCESS) {
+            if (response == BgApiResponse.UNKNOWN) {
+                logger.warn("UNKNOWN response received, trying to listen to events anyway: {}",
+                        completedEventType.getSimpleName());
+            }
+            if (response == BgApiResponse.SUCCESS
+                    // sometimes BlueGiga sends UNKNOWN response, weired but it looks like it is working anyway
+                    || response == BgApiResponse.UNKNOWN) {
                 try {
                     BlueGigaResponse event = eventsCaptor.poll(eventWaitTimeout);
                     if (event == null) {
@@ -344,7 +368,8 @@ class BluegigaHandler implements BlueGigaEventListener {
                     throw new BluegigaException("Bluegiga procedure has been interrupted", e);
                 }
             }
-            throw new BluegigaException("Could not initiate Bluegiga process: " + response);
+            throw new BluegigaException("Could not initiate process: "
+                    + completedEventType.getSimpleName() + " / " + response);
         }
     }
 
@@ -358,7 +383,13 @@ class BluegigaHandler implements BlueGigaEventListener {
             eventsCaptor.setCompletedEventType(completedEventType);
             eventsCaptor.setCompletionPredicate(completionPredicate);
             BgApiResponse response = initialCommand.get();
-            if (response == BgApiResponse.SUCCESS) {
+            if (response == BgApiResponse.UNKNOWN) {
+                logger.warn("UNKNOWN response received, trying to listen to events anyway: {} / {}",
+                        aggregatedEventType.getSimpleName(), completedEventType.getSimpleName());
+            }
+            if (response == BgApiResponse.SUCCESS
+                    // sometimes BlueGiga sends UNKNOWN response, weired but it looks like it is working anyway
+                    || response == BgApiResponse.UNKNOWN) {
                 try {
                     List<E> events = new ArrayList<>();
                     BlueGigaResponse event;
@@ -378,7 +409,9 @@ class BluegigaHandler implements BlueGigaEventListener {
                     throw new BluegigaException("Event receiving process has been interrupted", e);
                 }
             }
-            throw new BluegigaException("Could not initiate process: " + response);
+            throw new BluegigaException("Could not initiate process: "
+                    + aggregatedEventType.getSimpleName() + " / "
+                    + completedEventType.getSimpleName() + " / " + response);
         }
     }
 
@@ -387,8 +420,8 @@ class BluegigaHandler implements BlueGigaEventListener {
      */
 
     private URL bgGetAdapterAddress() {
-        BlueGigaAddressGetResponse addressResponse = (BlueGigaAddressGetResponse)
-                sendTransaction(new BlueGigaAddressGetCommand());
+        BlueGigaAddressGetResponse addressResponse = sendTransaction(new BlueGigaAddressGetCommand(),
+                BlueGigaAddressGetResponse.class);
         if (addressResponse != null) {
             return new URL(BluegigaFactory.BLUEGIGA_PROTOCOL_NAME, addressResponse.getAddress(), null);
         }
@@ -413,21 +446,21 @@ class BluegigaHandler implements BlueGigaEventListener {
         connect.setConnIntervalMax(connIntervalMax);
         connect.setLatency(latency);
         connect.setTimeout(timeout);
-        BlueGigaConnectDirectResponse connectResponse = (BlueGigaConnectDirectResponse) sendTransaction(connect);
+        BlueGigaConnectDirectResponse connectResponse = sendTransaction(connect, BlueGigaConnectDirectResponse.class);
         return connectResponse.getResult();
     }
 
     private BgApiResponse bgDisconnect(int connectionHandle) {
         BlueGigaDisconnectCommand command = new BlueGigaDisconnectCommand();
         command.setConnection(connectionHandle);
-        return ((BlueGigaDisconnectResponse) sendTransaction(command)).getResult();
+        return sendTransaction(command, BlueGigaDisconnectResponse.class).getResult();
     }
 
     private boolean bgSetMode(GapConnectableMode connectableMode, GapDiscoverableMode discoverableMode) {
         BlueGigaSetModeCommand command = new BlueGigaSetModeCommand();
         command.setConnect(connectableMode);
         command.setDiscover(discoverableMode);
-        BlueGigaSetModeResponse response = (BlueGigaSetModeResponse) sendTransaction(command);
+        BlueGigaSetModeResponse response = sendTransaction(command, BlueGigaSetModeResponse.class);
 
         return response.getResult() == BgApiResponse.SUCCESS;
     }
@@ -435,7 +468,7 @@ class BluegigaHandler implements BlueGigaEventListener {
     private BgApiResponse bgGetStatus(int connectionHandle) {
         BlueGigaGetStatusCommand command = new BlueGigaGetStatusCommand();
         command.setConnection(connectionHandle);
-        BlueGigaGetStatusResponse response = (BlueGigaGetStatusResponse) sendTransaction(command);
+        BlueGigaGetStatusResponse response = sendTransaction(command, BlueGigaGetStatusResponse.class);
 
         return response.getConnection() == connectionHandle
                 ? BgApiResponse.getBgApiResponse(BgApiResponse.SUCCESS.getKey())
@@ -449,7 +482,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         command.setStart(1);
         command.setEnd(65535);
         command.setUuid(UUID.fromString("00002800-0000-0000-0000-000000000000"));
-        BlueGigaReadByGroupTypeResponse response = (BlueGigaReadByGroupTypeResponse) sendTransaction(command);
+        BlueGigaReadByGroupTypeResponse response = sendTransaction(command, BlueGigaReadByGroupTypeResponse.class);
         return response.getResult();
     }
 
@@ -459,7 +492,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         command.setConnection(connectionHandle);
         command.setStart(1);
         command.setEnd(65535);
-        BlueGigaFindInformationResponse response = (BlueGigaFindInformationResponse) sendTransaction(command);
+        BlueGigaFindInformationResponse response = sendTransaction(command, BlueGigaFindInformationResponse.class);
         return response.getResult();
     }
 
@@ -470,7 +503,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         command.setStart(1);
         command.setEnd(65535);
         command.setUuid(UUID.fromString("00002803-0000-0000-0000-000000000000"));
-        BlueGigaReadByTypeResponse response = (BlueGigaReadByTypeResponse) sendTransaction(command);
+        BlueGigaReadByTypeResponse response = sendTransaction(command, BlueGigaReadByTypeResponse.class);
         return response.getResult();
     }
 
@@ -479,7 +512,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         BlueGigaReadByHandleCommand command = new BlueGigaReadByHandleCommand();
         command.setConnection(connectionHandle);
         command.setChrHandle(characteristicHandle);
-        BlueGigaReadByHandleResponse response = (BlueGigaReadByHandleResponse) sendTransaction(command);
+        BlueGigaReadByHandleResponse response = sendTransaction(command, BlueGigaReadByHandleResponse.class);
 
         return response.getResult();
     }
@@ -490,16 +523,30 @@ class BluegigaHandler implements BlueGigaEventListener {
         command.setConnection(connectionHandle);
         command.setAttHandle(handle);
         command.setData(value);
-        BlueGigaAttributeWriteResponse response = (BlueGigaAttributeWriteResponse) sendTransaction(command);
+        BlueGigaAttributeWriteResponse response = sendTransaction(command, BlueGigaAttributeWriteResponse.class);
 
         return response.getResult();
+    }
+
+    private boolean bgReset() {
+        logger.debug("BlueGiga RESET");
+        BlueGigaResetCommand command = new BlueGigaResetCommand();
+        try {
+            bgHandler.sendTransaction(command, BlueGigaResetResponse.class, 1000);
+            return true;
+        } catch (TimeoutException expected) {
+            return true;
+        } catch (Exception ex) {
+            return false;
+        }
     }
 
     private void closeAllConnections() {
 
         int maxConnections = 0;
         BlueGigaCommand command = new BlueGigaGetConnectionsCommand();
-        BlueGigaGetConnectionsResponse connectionsResponse = (BlueGigaGetConnectionsResponse) sendTransaction(command);
+        BlueGigaGetConnectionsResponse connectionsResponse =
+                sendTransaction(command, BlueGigaGetConnectionsResponse.class);
         if (connectionsResponse != null) {
             maxConnections = connectionsResponse.getMaxconn();
         }
@@ -565,16 +612,16 @@ class BluegigaHandler implements BlueGigaEventListener {
 
     private void closeBGHandler() {
         if (bgHandler != null) {
-            bgHandler.close();
+            bgHandler.close(10000);
         }
         if (nrSerialPort != null) {
             RXTXPort serialPort = nrSerialPort.getSerialPortInstance();
             if (serialPort != null) {
                 try {
-                    serialPort.disableReceiveTimeout();
+                    //serialPort.disableReceiveTimeout();
                     serialPort.removeEventListener();
                 } catch (Exception ex) {
-                    logger.debug("Could not dispose serial port object: {}", ex.getMessage());
+                    logger.warn("Could not dispose serial port object: {}", ex.getMessage());
                 }
             }
             // Note: this will fail with a SIGSEGV error on OSX:

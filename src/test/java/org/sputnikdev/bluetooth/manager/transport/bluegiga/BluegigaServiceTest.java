@@ -42,11 +42,6 @@ public class BluegigaServiceTest {
     }
 
     @Test
-    public void testDispose() throws Exception {
-        bluegigaService.dispose();
-    }
-
-    @Test
     public void testAddGetCharacteristic() throws Exception {
         bluegigaService.addCharacteristic(characteristic);
 

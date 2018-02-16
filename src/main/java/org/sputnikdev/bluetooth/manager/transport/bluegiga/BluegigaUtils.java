@@ -21,7 +21,6 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
  */
 
 import com.zsmartsystems.bluetooth.bluegiga.BlueGigaResponse;
-import org.sputnikdev.bluetooth.manager.transport.BluetoothObject;
 
 import java.util.UUID;
 
@@ -33,12 +32,6 @@ import java.util.UUID;
 final class BluegigaUtils {
 
     private BluegigaUtils() { }
-
-    public static void dispose(BluetoothObject object) {
-        try {
-            object.dispose();
-        } catch (Exception ignore) { /* do nothing */ }
-    }
 
     public static byte[] fromInts(int[] data) {
         byte[] bytes = new byte[data.length];

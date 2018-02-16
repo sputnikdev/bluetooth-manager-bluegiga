@@ -18,6 +18,7 @@ import org.sputnikdev.bluetooth.manager.DiscoveredAdapter;
 import org.sputnikdev.bluetooth.manager.DiscoveredDevice;
 import org.sputnikdev.bluetooth.manager.transport.Device;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -365,6 +366,14 @@ public class BluegigaFactoryTest {
         assertTrue(discovered.containsKey(ADAPTER_1_DEVICE_2_URL));
         assertTrue(discovered.containsKey(ADAPTER_2_DEVICE_1_URL));
 
+        BluegigaDevice bluegigaDevice = (BluegigaDevice) bluegigaFactory.getAdapter(ADAPTER_URL_1).getDevices().get(0);
+        when(bluegigaDevice.getLastDiscovered()).thenReturn(null);
+        discovered = bluegigaFactory.getDiscoveredDevices().stream()
+                .collect(Collectors.toMap(DiscoveredDevice::getURL, Function.identity()));
+        assertEquals(2, discovered.size());
+        assertTrue(discovered.containsKey(ADAPTER_1_DEVICE_2_URL));
+        assertTrue(discovered.containsKey(ADAPTER_2_DEVICE_1_URL));
+
         when(bluegigaHandler1.isAlive()).thenReturn(false);
 
         discovered = bluegigaFactory.getDiscoveredDevices().stream()
@@ -467,6 +476,7 @@ public class BluegigaFactoryTest {
     private BluegigaDevice mockDevice(URL url) {
         BluegigaDevice bluegigaDevice = mock(BluegigaDevice.class);
         when(bluegigaDevice.getURL()).thenReturn(url);
+        when(bluegigaDevice.getLastDiscovered()).thenReturn(Instant.now());
         return bluegigaDevice;
     }
 

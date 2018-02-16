@@ -63,6 +63,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyLong;
+import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isA;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -87,10 +88,6 @@ public class BluegigaHandlerTest {
     @InjectMocks
     @Spy
     private BluegigaHandler handler = new BluegigaHandler(PORT_NAME);
-
-    @Test
-    public void create() throws Exception {
-    }
 
     @Test
     public void testGetPortName() throws Exception {
@@ -131,7 +128,8 @@ public class BluegigaHandlerTest {
         mockTransaction(BlueGigaHelloCommand.class, helloResponse);
         assertTrue(handler.isAlive());
 
-        when(bgHandler.sendTransaction(isA(BlueGigaHelloCommand.class), anyLong())).thenThrow(Exception.class);
+        when(bgHandler.sendTransaction(isA(BlueGigaHelloCommand.class), eq(BlueGigaHelloResponse.class), anyLong()))
+                .thenThrow(Exception.class);
         assertFalse(handler.isAlive());
 
         verify(bgHandler, times(5)).isAlive();
@@ -261,7 +259,8 @@ public class BluegigaHandlerTest {
 
         assertTrue(handler.writeCharacteristicWithoutResponse(CONNECTION_HANDLE, CHARACTERISTIC_HANDLE, data));
 
-        when(bgHandler.sendTransaction(isA(BlueGigaAttributeWriteCommand.class), anyLong()))
+        when(bgHandler.sendTransaction(isA(BlueGigaAttributeWriteCommand.class),
+                eq(BlueGigaAttributeWriteResponse.class), anyLong()))
             .thenReturn(writeResponse);
     }
 
@@ -322,34 +321,41 @@ public class BluegigaHandlerTest {
         when(bgHandler.isAlive()).thenReturn(true);
         BlueGigaEndProcedureResponse endProcedureResponse = mock(BlueGigaEndProcedureResponse.class);
         when(endProcedureResponse.getResult()).thenReturn(BgApiResponse.SUCCESS);
-        when(bgHandler.sendTransaction(isA(BlueGigaEndProcedureCommand.class), anyLong())).thenReturn(endProcedureResponse);
+        when(bgHandler.sendTransaction(isA(BlueGigaEndProcedureCommand.class),
+                eq(BlueGigaEndProcedureResponse.class), anyLong())).thenReturn(endProcedureResponse);
 
         BlueGigaGetConnectionsResponse connectionsResponse = mock(BlueGigaGetConnectionsResponse.class);
         when(connectionsResponse.getMaxconn()).thenReturn(3);
-        when(bgHandler.sendTransaction(isA(BlueGigaGetConnectionsCommand.class), anyLong())).thenReturn(connectionsResponse);
+        when(bgHandler.sendTransaction(isA(BlueGigaGetConnectionsCommand.class),
+                eq(BlueGigaGetConnectionsResponse.class), anyLong())).thenReturn(connectionsResponse);
 
         BlueGigaDisconnectResponse disconnectResponse = mock(BlueGigaDisconnectResponse.class);
         when(disconnectResponse.getResult()).thenReturn(BgApiResponse.SUCCESS);
-        when(bgHandler.sendTransaction(isA(BlueGigaDisconnectCommand.class), anyLong())).thenReturn(disconnectResponse);
+        when(bgHandler.sendTransaction(isA(BlueGigaDisconnectCommand.class),
+                eq(BlueGigaDisconnectResponse.class), anyLong())).thenReturn(disconnectResponse);
 
         handler.dispose();
 
-        verify(bgHandler).sendTransaction(isA(BlueGigaEndProcedureCommand.class), anyLong());
-        verify(bgHandler, times(3)).sendTransaction(isA(BlueGigaDisconnectCommand.class), anyLong());
-        verify(bgHandler).close();
+        verify(bgHandler).sendTransaction(isA(BlueGigaEndProcedureCommand.class),
+                eq(BlueGigaEndProcedureResponse.class), anyLong());
+        verify(bgHandler).sendTransaction(isA(BlueGigaGetConnectionsCommand.class),
+                eq(BlueGigaGetConnectionsResponse.class), anyLong());
+        verify(bgHandler, times(3)).sendTransaction(isA(BlueGigaDisconnectCommand.class),
+                eq(BlueGigaDisconnectResponse.class), anyLong());
+        verify(bgHandler).close(anyLong());
     }
 
     @Test(expected = BlueGigaException.class)
     public void testSendTransactionException() throws Exception {
         when(bgHandler.isAlive()).thenReturn(true);
-        when(bgHandler.sendTransaction(any(), anyLong())).thenThrow(RuntimeException.class);
+        when(bgHandler.sendTransaction(any(), any(), anyLong())).thenThrow(RuntimeException.class);
 
         handler.bgGetInfo();
     }
 
     @Test(expected = BluegigaException.class)
     public void testSyncCallExceptionBadResponse() throws Exception {
-        mockConnect(BgApiResponse.UNKNOWN, CONNECTION_HANDLE, DEVICE_URL);
+        mockConnect(BgApiResponse.INVALID_COMMAND, CONNECTION_HANDLE, DEVICE_URL);
     }
 
     @Test(expected = BluegigaException.class)
@@ -372,7 +378,7 @@ public class BluegigaHandlerTest {
     @Test(expected = BluegigaException.class)
     public void testSyncProcedureCallExceptionBadResponse() throws Exception {
         mockSyncProcedure(BlueGigaReadByGroupTypeCommand.class, BlueGigaReadByGroupTypeResponse.class,
-            BgApiResponse.UNKNOWN, CONNECTION_HANDLE);
+            BgApiResponse.INVALID_COMMAND, CONNECTION_HANDLE);
         handler.getServices(CONNECTION_HANDLE);
     }
 
@@ -399,10 +405,9 @@ public class BluegigaHandlerTest {
         Executors.newSingleThreadScheduledExecutor().schedule(runnable, 100, TimeUnit.MILLISECONDS);
     }
 
-    private void mockTransaction(Class<? extends BlueGigaCommand> requestClass,
-                                 BlueGigaResponse respose) throws TimeoutException {
-        when(bgHandler.sendTransaction(isA(requestClass), anyLong()))
-            .thenReturn(respose);
+    private <T extends BlueGigaResponse> void mockTransaction(Class<? extends BlueGigaCommand> requestClass,
+                                 T response) throws TimeoutException {
+        when(bgHandler.sendTransaction(isA(requestClass), any(), anyLong())).thenReturn(response);
     }
 
     private BlueGigaConnectionStatusEvent mockConnect(BgApiResponse response, int connectionHandle, URL url)
@@ -470,7 +475,7 @@ public class BluegigaHandlerTest {
         });
     }
 
-    private <C extends BlueGigaCommand, R extends BlueGigaResponse, E extends BlueGigaResponse,
+    private <C extends BlueGigaCommand, R extends BlueGigaResponse,
         F extends BlueGigaResponse> void mockAsyncMultiEventProcedure(
         Class<C> commandClass, Class<R> responseClass, F... events) throws Exception {
         mockSyncProcedure(commandClass, responseClass, BgApiResponse.SUCCESS, CONNECTION_HANDLE);

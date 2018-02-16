@@ -224,11 +224,6 @@ public class BluegigaCharacteristicTest {
     }
 
     @Test
-    public void dispose() throws Exception {
-        characteristic.dispose();
-    }
-
-    @Test
     public void getCharacteristicHandle() throws Exception {
         assertEquals(CHARACTERISTIC_HANDLE, characteristic.getCharacteristicHandle());
     }

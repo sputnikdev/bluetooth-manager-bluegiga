@@ -31,7 +31,6 @@ import org.sputnikdev.bluetooth.manager.transport.BluetoothObjectFactory;
 import org.sputnikdev.bluetooth.manager.transport.Characteristic;
 import org.sputnikdev.bluetooth.manager.transport.Device;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -133,22 +132,23 @@ public class BluegigaFactory implements BluetoothObjectFactory {
     }
 
     @Override
-    public List<DiscoveredAdapter> getDiscoveredAdapters() {
+    public Set<DiscoveredAdapter> getDiscoveredAdapters() {
         logger.debug("Discovered adapters requested");
         discoverAdapters();
-        List<DiscoveredAdapter> discovered = adapters.values().stream().map(BluegigaFactory::convert)
-                .collect(Collectors.toList());
+        Set<DiscoveredAdapter> discovered = adapters.values().stream().map(BluegigaFactory::convert)
+                .collect(Collectors.toSet());
         logger.debug("Discovered adapters: [{}]", discovered.stream().map(DiscoveredAdapter::getURL)
                 .map(Object::toString).collect(Collectors.joining(", ")));
         return discovered;
     }
 
     @Override
-    public List<DiscoveredDevice> getDiscoveredDevices() {
+    public Set<DiscoveredDevice> getDiscoveredDevices() {
         logger.debug("Discovered devices requested");
-        List<DiscoveredDevice> discovered = adapters.values().stream().filter(BluegigaAdapter::isAlive)
+        Set<DiscoveredDevice> discovered = adapters.values().stream().filter(BluegigaAdapter::isAlive)
                 .flatMap(adapter -> adapter.getDevices().stream())
-                .map(BluegigaFactory::convert).collect(Collectors.toList());
+                .filter(device -> ((BluegigaDevice) device).getLastDiscovered() != null)
+                .map(BluegigaFactory::convert).collect(Collectors.toSet());
         logger.debug("Discovered devices: [{}]", discovered.stream().map(DiscoveredDevice::getURL).map(Object::toString)
                 .collect(Collectors.joining(", ")));
         return discovered;
@@ -189,7 +189,7 @@ public class BluegigaFactory implements BluetoothObjectFactory {
      * Disposes the factory.
      */
     public void dispose() {
-        logger.debug("Disposing factory: {}", Integer.toHexString(hashCode()));
+        logger.warn("Disposing factory: {}", Integer.toHexString(hashCode()));
         adapters.values().forEach(adapter -> {
             try {
                 adapter.dispose();
@@ -199,6 +199,29 @@ public class BluegigaFactory implements BluetoothObjectFactory {
         });
         adapters.clear();
         logger.debug("Factory disposed: {}", Integer.toHexString(hashCode()));
+    }
+
+    @Override
+    public void dispose(URL url) {
+        logger.debug("Bluetooth object disposal requested: {}", url);
+        URL bluegigaURL = url.copyWithProtocol(BLUEGIGA_PROTOCOL_NAME);
+        if (bluegigaURL.isAdapter()) {
+            adapters.computeIfPresent(bluegigaURL, (key, adapter) -> {
+                adapter.dispose();
+                return null;
+            });
+        } else if (bluegigaURL.isDevice()) {
+            // characteristics cannot be disposed separately
+            adapters.computeIfPresent(bluegigaURL.getAdapterURL(), (key, adapter) -> {
+                adapter.disposeDevice(bluegigaURL.getDeviceURL());
+                return adapter;
+            });
+        } else if (bluegigaURL.isCharacteristic()) {
+            // just disconnect corresponding device so that characteristic becomes invalidated
+            Optional.ofNullable(adapters.get(bluegigaURL.getAdapterURL()))
+                    .map(adapter -> adapter.getDevice(bluegigaURL.getDeviceURL()))
+                    .ifPresent(BluegigaDevice::disconnect);
+        }
     }
 
     protected BluegigaAdapter createAdapter(String portName) {
@@ -308,7 +331,7 @@ public class BluegigaFactory implements BluetoothObjectFactory {
         try {
             return createAdapter(portName);
         } catch (Exception ex) {
-            logger.debug("Error occurred while creating a new adapter for port: {}, {}", portName, ex.getMessage());
+            logger.warn("Error occurred while creating a new adapter for port: {}, {}", portName, ex.getMessage());
         }
         return null;
     }
