@@ -325,18 +325,23 @@ class BluegigaHandler implements BlueGigaEventListener {
         try {
             return bgHandler.sendTransaction(command, expected, eventWaitTimeout);
         } catch (TimeoutException timeout) {
-            logger.warn("Timeout has happened while sending a transaction: {}", command.getClass().getSimpleName());
+            logger.warn("Timeout has happened while sending a transaction, retry one more time: {}",
+                    command.getClass().getSimpleName());
             try {
                 return bgHandler.sendTransaction(command, expected, eventWaitTimeout);
-            } catch (Exception timeout2) {
+            } catch (TimeoutException timeout2) {
                 logger.warn("Timeout has happened second time, giving up: {}", command.getClass().getSimpleName());
                 closeBGHandler();
-                throw new BlueGigaException("Bluegiga adapter does not respond", timeout2);
+                throw new BlueGigaException("Bluegiga adapter does not respond for a transaction: "
+                        + command.getClass().getSimpleName(), timeout2);
+            } catch (Exception ex) {
+                closeBGHandler();
+                throw new BlueGigaException("Error occurred while retrying to send a transaction: "
+                        + command.getClass().getSimpleName(), ex);
             }
         } catch (Exception e) {
             logger.warn("Error occurred while sending a transaction: {} : {} : {}",
                     command.getClass().getSimpleName(), e.getClass().getSimpleName(), e.getMessage());
-
             closeBGHandler();
             throw new BlueGigaException("Fatal error in communication with BlueGiga adapter.", e);
         }
@@ -349,27 +354,13 @@ class BluegigaHandler implements BlueGigaEventListener {
         synchronized (eventsCaptor) {
             eventsCaptor.setCompletedEventType(completedEventType);
             eventsCaptor.setCompletionPredicate(completionPredicate);
-            BgApiResponse response = initialCommand.get();
-            if (response == BgApiResponse.UNKNOWN) {
-                logger.warn("UNKNOWN response received, trying to listen to events anyway: {}",
+            try {
+                return callProcedure(completedEventType, initialCommand);
+            } catch (BluegigaTimeoutException ignore) {
+                logger.warn("Timeout received while calling simple procedure: {}. Trying one more time",
                         completedEventType.getSimpleName());
+                return callProcedure(completedEventType, initialCommand);
             }
-            if (response == BgApiResponse.SUCCESS
-                    // sometimes BlueGiga sends UNKNOWN response, weired but it looks like it is working anyway
-                    || response == BgApiResponse.UNKNOWN) {
-                try {
-                    BlueGigaResponse event = eventsCaptor.poll(eventWaitTimeout);
-                    if (event == null) {
-                        throw new BluegigaTimeoutException("Could not receive expected event");
-                    }
-                    eventsCaptor.reset();
-                    return (T) event;
-                } catch (InterruptedException e) {
-                    throw new BluegigaException("Bluegiga procedure has been interrupted", e);
-                }
-            }
-            throw new BluegigaException("Could not initiate process: "
-                    + completedEventType.getSimpleName() + " / " + response);
         }
     }
 
@@ -382,37 +373,77 @@ class BluegigaHandler implements BlueGigaEventListener {
             eventsCaptor.setAggregationPredicate(aggregationPredicate);
             eventsCaptor.setCompletedEventType(completedEventType);
             eventsCaptor.setCompletionPredicate(completionPredicate);
-            BgApiResponse response = initialCommand.get();
-            if (response == BgApiResponse.UNKNOWN) {
-                logger.warn("UNKNOWN response received, trying to listen to events anyway: {} / {}",
+            try {
+                return callProcedure(aggregatedEventType, completedEventType, initialCommand);
+            } catch (BluegigaTimeoutException ignore) {
+                logger.warn("Timeout received while calling complex procedure: {} / {}. Trying one more time",
                         aggregatedEventType.getSimpleName(), completedEventType.getSimpleName());
+                return callProcedure(aggregatedEventType, completedEventType, initialCommand);
             }
-            if (response == BgApiResponse.SUCCESS
-                    // sometimes BlueGiga sends UNKNOWN response, weired but it looks like it is working anyway
-                    || response == BgApiResponse.UNKNOWN) {
-                try {
-                    List<E> events = new ArrayList<>();
-                    BlueGigaResponse event;
-                    while (true) {
-                        event = eventsCaptor.poll(eventWaitTimeout);
-                        if (event == null) {
-                            throw new BluegigaException("Could not receive expected event");
-                        }
-                        if (eventsCaptor.isCompletionEvent(event)) {
-                            eventsCaptor.reset();
-                            return events;
-                        } else {
-                            events.add((E) event);
-                        }
-                    }
-                } catch (InterruptedException e) {
-                    throw new BluegigaException("Event receiving process has been interrupted", e);
-                }
-            }
-            throw new BluegigaException("Could not initiate process: "
-                    + aggregatedEventType.getSimpleName() + " / "
-                    + completedEventType.getSimpleName() + " / " + response);
         }
+    }
+
+    private <T extends BlueGigaResponse> T callProcedure(Class<T> completedEventType,
+                                                         Supplier<BgApiResponse> initialCommand) {
+        BgApiResponse response = initialCommand.get();
+        if (response == BgApiResponse.UNKNOWN) {
+            logger.warn("UNKNOWN response received, trying to listen to events anyway: {}",
+                    completedEventType.getSimpleName());
+        }
+        if (response == BgApiResponse.SUCCESS
+                // sometimes BlueGiga sends UNKNOWN response, we will try to listen to events,
+                // but most likely it will time out, the caller of this method (syncCall) will retry 1 time
+                || response == BgApiResponse.UNKNOWN) {
+            try {
+                BlueGigaResponse event = eventsCaptor.poll(eventWaitTimeout);
+                if (event == null) {
+                    throw new BluegigaTimeoutException("Could not receive expected event: "
+                            + completedEventType.getSimpleName());
+                }
+                eventsCaptor.reset();
+                return (T) event;
+            } catch (InterruptedException e) {
+                throw new BluegigaException("Bluegiga procedure has been interrupted", e);
+            }
+        }
+        throw new BluegigaException("Could not initiate process: "
+                + completedEventType.getSimpleName() + " / " + response);
+    }
+
+    private <E extends BlueGigaResponse, C extends BlueGigaResponse> List<E> callProcedure(
+            Class<E> aggregatedEventType, Class<C> completedEventType, Supplier<BgApiResponse> initialCommand) {
+        BgApiResponse response = initialCommand.get();
+        if (response == BgApiResponse.UNKNOWN) {
+            logger.warn("UNKNOWN response received, trying to listen to events anyway: {} / {}",
+                    aggregatedEventType.getSimpleName(), completedEventType.getSimpleName());
+        }
+        if (response == BgApiResponse.SUCCESS
+                // sometimes BlueGiga sends UNKNOWN response, we will try to listen to events,
+                // but most likely it will time out, the caller of this method (syncCallProcedure) will retry 1 time
+                || response == BgApiResponse.UNKNOWN) {
+            try {
+                List<E> events = new ArrayList<>();
+                BlueGigaResponse event;
+                while (true) {
+                    event = eventsCaptor.poll(eventWaitTimeout);
+                    if (event == null) {
+                        throw new BluegigaTimeoutException("Could not receive expected event: "
+                                + aggregatedEventType.getSimpleName() + " or " + completedEventType.getSimpleName());
+                    }
+                    if (eventsCaptor.isCompletionEvent(event)) {
+                        eventsCaptor.reset();
+                        return events;
+                    } else {
+                        events.add((E) event);
+                    }
+                }
+            } catch (InterruptedException e) {
+                throw new BluegigaException("Event receiving process has been interrupted", e);
+            }
+        }
+        throw new BluegigaException("Could not initiate process: "
+                + aggregatedEventType.getSimpleName() + " / "
+                + completedEventType.getSimpleName() + " / " + response);
     }
 
     /*
