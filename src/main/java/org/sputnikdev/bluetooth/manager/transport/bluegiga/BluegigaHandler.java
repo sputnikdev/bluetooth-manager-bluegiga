@@ -97,7 +97,7 @@ import java.util.function.Supplier;
  */
 class BluegigaHandler implements BlueGigaEventListener {
 
-    private static final long DEFAULT_WAIT_TIME = 10000;
+    private static final long DEFAULT_WAIT_TIME = 5000;
 
     private final Logger logger = LoggerFactory.getLogger(BluegigaHandler.class);
 
@@ -360,7 +360,7 @@ class BluegigaHandler implements BlueGigaEventListener {
                 try {
                     BlueGigaResponse event = eventsCaptor.poll(eventWaitTimeout);
                     if (event == null) {
-                        throw new BluegigaException("Could not receive expected event");
+                        throw new BluegigaTimeoutException("Could not receive expected event");
                     }
                     eventsCaptor.reset();
                     return (T) event;

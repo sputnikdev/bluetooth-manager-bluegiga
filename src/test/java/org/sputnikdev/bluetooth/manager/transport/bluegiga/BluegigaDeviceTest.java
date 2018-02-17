@@ -12,6 +12,8 @@ import com.zsmartsystems.bluetooth.bluegiga.enumeration.BluetoothAddressType;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -34,6 +36,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -45,11 +48,13 @@ import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.anyShort;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -87,6 +92,15 @@ public class BluegigaDeviceTest {
     private BlueGigaConnectionStatusEvent connectionStatusEvent;
     private Notification<Boolean> booleanNotification = (Notification<Boolean>) mock(Notification.class);
 
+    @Captor
+    private ArgumentCaptor<Map<String, byte[]>> serviceDataCaptor;
+    @Mock
+    private Notification<Map<String, byte[]>> serviceDataNotification;
+    @Captor
+    private ArgumentCaptor<Map<Short, byte[]>> manufacturerDataCaptor;
+    @Mock
+    private Notification<Map<Short, byte[]>> manufacturerDataNotification;
+
     @Before
     public void setUp() {
         when(bluegigaHandler.isAlive()).thenReturn(true);
@@ -94,7 +108,7 @@ public class BluegigaDeviceTest {
         bluegigaDevice = new BluegigaDevice(bluegigaHandler, DEVICE_URL);
 
         connectionStatusEvent = mockConnectionStatusEvent();
-        when(bluegigaHandler.connect(DEVICE_URL, BluetoothAddressType.UNKNOWN)).thenReturn(connectionStatusEvent);
+        when(bluegigaHandler.connect(eq(DEVICE_URL), any(BluetoothAddressType.class))).thenReturn(connectionStatusEvent);
 
         List<BlueGigaGroupFoundEvent> serviceEvents = new ArrayList<>();
         serviceEvents.add(mockServiceEvent(BATTERY_SERVICE_URL, 1, 10));
@@ -125,6 +139,13 @@ public class BluegigaDeviceTest {
         doAnswer(invocation -> {
             return invocation.getArgumentAt(0, Supplier.class).get();
         }).when(bluegigaHandler).runInSynchronizedContext(any(Supplier.class));
+        doAnswer(invocation -> {
+            invocation.getArgumentAt(0, Runnable.class).run();
+            return null;
+        }).when(bluegigaHandler).runInSynchronizedContext(any(Runnable.class));
+
+        doNothing().when(serviceDataNotification).notify(serviceDataCaptor.capture());
+        doNothing().when(manufacturerDataNotification).notify(manufacturerDataCaptor.capture());
     }
 
     @Test
@@ -147,15 +168,39 @@ public class BluegigaDeviceTest {
 
         assertTrue(bluegigaDevice.connect());
 
-        assertServices();
-
-        assertCharacteristics();
-
-        assertDescriptors();
-
-        assertTrue(bluegigaDevice.isServicesResolved());
-
         verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.UNKNOWN);
+        verify(bluegigaHandler).getServices(CONNECTION_HANDLE);
+        verify(bluegigaHandler).getCharacteristics(CONNECTION_HANDLE);
+        verify(bluegigaHandler).getDeclarations(CONNECTION_HANDLE);
+        verify(booleanNotification).notify(true);
+        assertEquals(CONNECTION_HANDLE, bluegigaDevice.getConnectionHandle());
+    }
+
+    @Test
+    public void testConnectionEventReceived() {
+        bluegigaDevice.enableConnectedNotifications(booleanNotification);
+        BlueGigaConnectionStatusEvent event = mockConnectionStatusEvent();
+        when(bluegigaHandler.connect(DEVICE_URL, BluetoothAddressType.UNKNOWN)).thenReturn(event);
+
+        assertFalse(bluegigaDevice.isConnected());
+
+        bluegigaDevice.bluegigaEventReceived(event);
+
+        assertServices();
+        assertCharacteristics();
+        assertDescriptors();
+        assertTrue(bluegigaDevice.isServicesResolved());
+        verify(bluegigaHandler, never()).connect(eq(DEVICE_URL), any(BluetoothAddressType.class));
+        verify(bluegigaHandler).getServices(CONNECTION_HANDLE);
+        verify(bluegigaHandler).getCharacteristics(CONNECTION_HANDLE);
+        verify(bluegigaHandler).getDeclarations(CONNECTION_HANDLE);
+        verify(booleanNotification).notify(true);
+        assertEquals(CONNECTION_HANDLE, bluegigaDevice.getConnectionHandle());
+
+        // next connection event must be disregarded
+        bluegigaDevice.bluegigaEventReceived(event);
+        assertTrue(bluegigaDevice.isServicesResolved());
+        verify(bluegigaHandler, never()).connect(eq(DEVICE_URL), any(BluetoothAddressType.class));
         verify(bluegigaHandler).getServices(CONNECTION_HANDLE);
         verify(bluegigaHandler).getCharacteristics(CONNECTION_HANDLE);
         verify(bluegigaHandler).getDeclarations(CONNECTION_HANDLE);
@@ -255,6 +300,82 @@ public class BluegigaDeviceTest {
 
         bluegigaDevice.bluegigaEventReceived(mockScanResponse((short) -100, EIR_SMARTLOCK_PACKET));
         assertTrue(bluegigaDevice.isBleEnabled());
+    }
+
+    @Test
+    public void testServiceResolvedData() {
+
+
+        assertTrue(bluegigaDevice.getServiceData().isEmpty());
+        bluegigaDevice.enableServiceDataNotifications(serviceDataNotification);
+
+        int[] eir16 = {/* length */ 0x04, /* service data 16 bit UUID*/ 0x16, 0x0F, 0x18, 0x45};
+        bluegigaDevice.bluegigaEventReceived(mockScanResponse((short) -100, eir16));
+
+        Map<String, byte[]> serviceData = bluegigaDevice.getServiceData();
+        Map<String, byte[]> notified = serviceDataCaptor.getValue();
+        assertEquals(1, serviceData.size());
+        assertEquals(1, notified.size());
+        assertTrue(serviceData.containsKey("0000180f-0000-1000-8000-00805f9b34fb"));
+        assertTrue(notified.containsKey("0000180f-0000-1000-8000-00805f9b34fb"));
+        assertArrayEquals(new byte[] {0x45}, serviceData.get("0000180f-0000-1000-8000-00805f9b34fb"));
+        assertArrayEquals(new byte[] {0x45}, notified.get("0000180f-0000-1000-8000-00805f9b34fb"));
+
+        int[] eir32 = {/* length */ 0xa,
+                /* service data 32 bit UUID*/ 0x20,
+                /* UUID */ 0x10, 0x8e, 0xe7, 0x74,
+                /* data */ 0x74, 0x01, 0x0d, 0x01, (byte) 0xec};
+        bluegigaDevice.bluegigaEventReceived(mockScanResponse((short) -100, eir32));
+        serviceData = bluegigaDevice.getServiceData();
+        notified = serviceDataCaptor.getAllValues().get(1);
+        assertEquals(2, serviceData.size());
+        assertEquals(2, notified.size());
+        assertTrue(serviceData.containsKey("74e78e10-0000-1000-8000-00805f9b34fb"));
+        assertTrue(notified.containsKey("74e78e10-0000-1000-8000-00805f9b34fb"));
+        assertArrayEquals(new byte[] {0x74, 0x01, 0x0d, 0x01, (byte) 0xec},
+                serviceData.get("74e78e10-0000-1000-8000-00805f9b34fb"));
+        assertArrayEquals(new byte[] {0x74, 0x01, 0x0d, 0x01, (byte) 0xec},
+                notified.get("74e78e10-0000-1000-8000-00805f9b34fb"));
+
+        int[] eir128 = {/* length */ 0x16,
+                /* service data 128 bit UUID*/ 0x21,
+                /* UUID */ 0x6d, 0x66, 0x70, 0x44, 0x73, 0x66, 0x62, 0x75, 0x66, 0x45, 0x76, 0x64, 0x55, 0xaa, 0x6c, 0x22,
+                /* data */ 0x74, 0x01, 0x0d, 0x01, (byte) 0xec};
+        bluegigaDevice.bluegigaEventReceived(mockScanResponse((short) -100, eir128));
+        serviceData = bluegigaDevice.getServiceData();
+        notified = serviceDataCaptor.getAllValues().get(2);
+        assertEquals(3, serviceData.size());
+        assertEquals(3, notified.size());
+        assertTrue(serviceData.containsKey("226caa55-6476-4566-7562-66734470666d"));
+        assertTrue(notified.containsKey("226caa55-6476-4566-7562-66734470666d"));
+        assertArrayEquals(new byte[] {0x74, 0x01, 0x0d, 0x01, (byte) 0xec},
+                serviceData.get("226caa55-6476-4566-7562-66734470666d"));
+        assertArrayEquals(new byte[] {0x74, 0x01, 0x0d, 0x01, (byte) 0xec},
+                notified.get("226caa55-6476-4566-7562-66734470666d"));
+
+        assertTrue(serviceData.containsKey("0000180f-0000-1000-8000-00805f9b34fb"));
+        assertTrue(serviceData.containsKey("74e78e10-0000-1000-8000-00805f9b34fb"));
+        assertTrue(serviceData.containsKey("226caa55-6476-4566-7562-66734470666d"));
+    }
+
+    @Test
+    public void testGetManufacturerData() {
+        bluegigaDevice.enableManufacturerDataNotifications(manufacturerDataNotification);
+        assertTrue(bluegigaDevice.getManufacturerData().isEmpty());
+        int[] data = {/* length */ 0x05,
+                /* manufacturer data ID */ 0xFF,
+                /* manufacturer ID */ 0xFF, 0x02,
+                /* data */ 0x00, 0xFF};
+        bluegigaDevice.bluegigaEventReceived(mockScanResponse((short) -100, data));
+
+        Map<Short, byte[]> manufacturerData = bluegigaDevice.getManufacturerData();
+        Map<Short, byte[]> notified = manufacturerDataCaptor.getValue();
+        assertEquals(1, manufacturerData.size());
+        assertEquals(1, notified.size());
+        assertTrue(manufacturerData.containsKey((short) 0x02FF));
+        assertTrue(notified.containsKey((short) 0x02FF));
+        assertArrayEquals(new byte[]{0x00, (byte) 0xFF}, manufacturerData.get((short) 0x02FF));
+        assertArrayEquals(new byte[]{0x00, (byte) 0xFF}, notified.get((short) 0x02FF));
     }
 
     @Test
@@ -395,7 +516,7 @@ public class BluegigaDeviceTest {
     }
 
     @Test
-    public void testBluegigaEventReceived() {
+    public void testBluegigaEventReceivedDisconnect() {
         Notification<Boolean> servicesResovedNotification = mock(Notification.class);
         Notification<Boolean> connectedNotification = mock(Notification.class);
 
@@ -415,14 +536,13 @@ public class BluegigaDeviceTest {
         verify(servicesResovedNotification, never()).notify(false);
 
         when(disconnectedEvent.getConnection()).thenReturn(CONNECTION_HANDLE);
-        when(disconnectedEvent.getReason()).thenReturn(BgApiResponse.CONNECTION_TERMINATED_BY_LOCAL_HOST);
+        when(disconnectedEvent.getReason()).thenReturn(BgApiResponse.UNKNOWN);
         bluegigaDevice.bluegigaEventReceived(disconnectedEvent);
         assertFalse(bluegigaDevice.isConnected());
-        verify(connectedNotification, never()).notify(false);
-        verify(servicesResovedNotification, never()).notify(false);
+        verify(connectedNotification).notify(false);
+        verify(servicesResovedNotification).notify(false);
 
-        bluegigaDevice.connect();
-        when(disconnectedEvent.getReason()).thenReturn(BgApiResponse.TIMEOUT);
+        // next events must be disregarded
         bluegigaDevice.bluegigaEventReceived(disconnectedEvent);
         assertFalse(bluegigaDevice.isConnected());
         verify(connectedNotification).notify(false);
