@@ -169,9 +169,12 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public short getRSSI() {
-        if (isConnected()) {
+        boolean connected = isConnected();
+        logger.debug("Getting device RSSI: {} : {} (connected) : {} (rssi)", url, connected, rssi);
+        if (connected) {
             rssi = getHandler().bgGetRssi(connectionHandle);
         } else if (lastDiscovered == null || lastDiscovered.isBefore(Instant.now().minusSeconds(DISCOVERY_TIMEOUT))) {
+            logger.debug("Device has not reported RSSI for a long time: {}", url);
             return 0;
         }
         return rssi;
@@ -196,11 +199,13 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public boolean isConnected() {
+        logger.debug("Checking if device connected: {} : {}", url, connectionHandle);
         if (connectionHandle == -1) {
             return false;
         }
         BlueGigaConnectionStatusEvent connectionStatusEvent = getHandler().getConnectionStatus(connectionHandle);
         if (url.getDeviceAddress().equals(connectionStatusEvent.getAddress())) {
+            logger.trace("Device is connected: {}", url);
             return true;
         } else {
             throw new BluegigaException("Inconsistent connection state. "
