@@ -86,6 +86,8 @@ import org.sputnikdev.bluetooth.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -658,8 +660,13 @@ class BluegigaHandler implements BlueGigaEventListener {
             // Note: this will fail with a SIGSEGV error on OSX:
             // Problematic frame: C  [librxtxSerial.jnilib+0x312f]  Java_gnu_io_RXTXPort_interruptEventLoop+0x6b
             // It is a known issue of the librxtxSerial lib
-            nrSerialPort.disconnect();
-
+            try {
+                CompletableFuture.runAsync(() -> {
+                    nrSerialPort.disconnect();
+                }).get(5000, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException | ExecutionException | TimeoutException e) {
+                logger.warn("Could not disconnect serial port");
+            }
             nrSerialPort = null;
         }
     }
