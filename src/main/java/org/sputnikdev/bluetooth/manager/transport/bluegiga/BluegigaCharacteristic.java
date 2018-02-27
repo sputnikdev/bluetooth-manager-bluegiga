@@ -77,6 +77,11 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
             byte[] configurationData = getConfiguration();
             if (configurationData != null && configurationData.length > 0) {
                 return (configurationData[0] & (NOTIFYING_FLAG | INDICATING_FLAG)) > 0;
+            } else {
+                // it appears that some characteristics with notify flag do not have any configuration descriptors,
+                // but still can notify, this basically means that notification is enabled by default
+                // and cannot be disabled
+                return true;
             }
         }
         return false;
@@ -138,6 +143,11 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
         }
     }
 
+    @Override
+    public boolean isNotificationConfigurable() {
+        return getNotificationConfigurationDescriptor() != null;
+    }
+
     protected void setFlags(Set<CharacteristicAccessType> flags) {
         this.flags = flags;
     }
@@ -165,11 +175,13 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
                     url, flags.stream().map(Enum::toString).collect(Collectors.joining(", ")));
             return;
         }
-        BluegigaDescriptor configuration = getConfigurationDescriptor();
+        BluegigaDescriptor configuration = getNotificationConfigurationDescriptor();
 
         if (configuration == null) {
-            throw new BluegigaException("Could not subscribe to a notification, "
-                + "because configuration descriptor was not found: " + url);
+            // it appears that some characteristics with notify flag do not have any configuration descriptors,
+            // but still can notify, this basically means that notification is enabled by default
+            // and cannot be disabled
+            return;
         }
 
         byte[] config = {0x0};
@@ -188,14 +200,14 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
     }
 
     private byte[] getConfiguration() {
-        BluegigaDescriptor configuration = getConfigurationDescriptor();
+        BluegigaDescriptor configuration = getNotificationConfigurationDescriptor();
         if (configuration != null) {
             return configuration.readValue();
         }
         return null;
     }
 
-    private BluegigaDescriptor getConfigurationDescriptor() {
+    private BluegigaDescriptor getNotificationConfigurationDescriptor() {
         return descriptors.get(url.copyWithCharacteristic(CONFIGURATION_UUID));
     }
 }

@@ -29,6 +29,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 
@@ -68,8 +69,10 @@ public class BluegigaCharacteristicTest {
     @Test
     public void testIsNotifying() throws Exception {
         assertFalse(characteristic.isNotifying());
+
+        // if no descriptor is present, this means that notification is enabled by default and cannot be disabled
         characteristic.setFlags(FLAGS);
-        assertFalse(characteristic.isNotifying());
+        assertTrue(characteristic.isNotifying());
 
         characteristic.addDescriptor(notificationDescriptor);
         when(notificationDescriptor.readValue()).thenReturn(new byte[] {0b0});
@@ -168,12 +171,25 @@ public class BluegigaCharacteristicTest {
         verify(notificationDescriptor, never()).writeValue(anyVararg());
     }
 
-    @Test(expected = BluegigaException.class)
+    @Test
     public void testToggleNotificationNoDescriptor() throws Exception {
+        // if no descriptor is present, this means that notification is enabled by default and cannot be disabled
         characteristic.setFlags(EnumSet.of(CharacteristicAccessType.NOTIFY));
-        when(notificationDescriptor.writeValue(anyVararg())).thenReturn(true);
 
+        // check if it is does not fail with any error
         characteristic.toggleNotification(false);
+        assertTrue(true);
+    }
+
+    @Test
+    public void testIsNotificationConfigurable() {
+        assertFalse(characteristic.isNotificationConfigurable());
+
+        characteristic.setFlags(EnumSet.of(CharacteristicAccessType.NOTIFY));
+        assertFalse(characteristic.isNotificationConfigurable());
+
+        characteristic.addDescriptor(notificationDescriptor);
+        assertTrue(characteristic.isNotificationConfigurable());
     }
 
     @Test(expected = BluegigaException.class)
