@@ -243,8 +243,8 @@ class BluegigaHandler implements BlueGigaEventListener {
     private BlueGigaProcedureCompletedEvent writeCharacteristicWithResponse(int connectionHandle,
                                                                   int characteristicHandle, int[] data) {
         return syncCall(BlueGigaProcedureCompletedEvent.class,
-                p -> p.getConnection() == connectionHandle && p.getChrHandle() == characteristicHandle,
-                () -> bgWriteCharacteristic(connectionHandle, characteristicHandle, data));
+            p -> p.getConnection() == connectionHandle && p.getChrHandle() == characteristicHandle,
+            () -> bgWriteCharacteristic(connectionHandle, characteristicHandle, data));
     }
 
     protected boolean writeCharacteristicWithoutResponse(int connectionHandle, int characteristicHandle, int[] data) {
