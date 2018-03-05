@@ -237,7 +237,7 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
     }
 
     protected void disposeDevice(URL url) {
-        logger.warn("Disposing device: {}", url);
+        logger.debug("Disposing device: {}", url);
         BluegigaDevice removed = devices.computeIfPresent(url, (key, device) -> {
             try {
                 device.dispose();

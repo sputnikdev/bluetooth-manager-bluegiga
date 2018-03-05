@@ -225,9 +225,26 @@ class BluegigaHandler implements BlueGigaEventListener {
 
     protected BlueGigaProcedureCompletedEvent writeCharacteristic(int connectionHandle,
                                                                   int characteristicHandle, int[] data) {
+        BlueGigaProcedureCompletedEvent result =
+                writeCharacteristicWithResponse(connectionHandle, characteristicHandle, data);
+        int retryCount = 0;
+        while (result.getResult() == BgApiResponse.APPLICATION && retryCount <= 10) {
+            logger.debug("Device responded with the APPLICATION result, retrying: {} / {} / {}",
+                    connectionHandle, characteristicHandle, retryCount);
+            result = writeCharacteristicWithResponse(connectionHandle, characteristicHandle, data);
+            retryCount++;
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException ignore) { /* do nothinf */ }
+        }
+        return result;
+    }
+
+    private BlueGigaProcedureCompletedEvent writeCharacteristicWithResponse(int connectionHandle,
+                                                                  int characteristicHandle, int[] data) {
         return syncCall(BlueGigaProcedureCompletedEvent.class,
-            p -> p.getConnection() == connectionHandle && p.getChrHandle() == characteristicHandle,
-            () -> bgWriteCharacteristic(connectionHandle, characteristicHandle, data));
+                p -> p.getConnection() == connectionHandle && p.getChrHandle() == characteristicHandle,
+                () -> bgWriteCharacteristic(connectionHandle, characteristicHandle, data));
     }
 
     protected boolean writeCharacteristicWithoutResponse(int connectionHandle, int characteristicHandle, int[] data) {
