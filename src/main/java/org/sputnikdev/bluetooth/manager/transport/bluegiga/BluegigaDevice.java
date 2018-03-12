@@ -34,6 +34,7 @@ import com.zsmartsystems.bluetooth.bluegiga.eir.EirPacket;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BluetoothAddressType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.sputnikdev.bluetooth.DataConversionUtils;
 import org.sputnikdev.bluetooth.URL;
 import org.sputnikdev.bluetooth.manager.transport.CharacteristicAccessType;
 import org.sputnikdev.bluetooth.manager.transport.Device;
@@ -507,6 +508,13 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
         logger.trace("Manufacturer data changed: {}", url);
         Map<Short, int[]> rawData =
                 (Map<Short, int[]>) eir.get(EirDataType.EIR_MANUFACTURER_SPECIFIC);
+
+        if (logger.isTraceEnabled()) {
+            logger.trace("Manufacturer data changed: {} : {}", url, rawData.entrySet().stream()
+                    .collect(Collectors.toMap(Map.Entry::getKey,
+                        entry -> DataConversionUtils.convert(BluegigaUtils.fromInts(entry.getValue()), 16))));
+        }
+
         rawData.forEach((id, data) ->
                 manufacturerData.compute(id, (key, value) -> BluegigaUtils.fromInts(data)));
         notifyManufacturerDataChanged();
@@ -514,8 +522,13 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     private boolean handleServiceData(Map<EirDataType, Object> eir, EirDataType type) {
         if (eir.containsKey(type)) {
-            logger.trace("Service data changed: {} / {}", url, type);
             Map<UUID, int[]> svcData = (Map<UUID, int[]>) eir.get(type);
+
+            if (logger.isTraceEnabled()) {
+                logger.trace("Service data changed: {} : {}", url, svcData.entrySet().stream()
+                        .collect(Collectors.toMap(entry -> getUUID(entry.getKey()),
+                            entry -> DataConversionUtils.convert(BluegigaUtils.fromInts(entry.getValue()), 16))));
+            }
 
             svcData.forEach((uuid, data) ->
                     serviceData.compute(getUUID(uuid), (key, value) -> BluegigaUtils.fromInts(data)));
