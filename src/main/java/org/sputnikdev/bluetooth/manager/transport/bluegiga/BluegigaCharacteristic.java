@@ -26,6 +26,7 @@ import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaAttr
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BgApiResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.sputnikdev.bluetooth.DataConversionUtils;
 import org.sputnikdev.bluetooth.URL;
 import org.sputnikdev.bluetooth.manager.transport.Characteristic;
 import org.sputnikdev.bluetooth.manager.transport.CharacteristicAccessType;
@@ -92,7 +93,11 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
         logger.debug("Reading value: {}", url);
         BlueGigaAttributeValueEvent blueGigaAttributeValueEvent =
                 bgHandler.readCharacteristic(connectionHandle, characteristicHandle);
-        return BluegigaUtils.fromInts(blueGigaAttributeValueEvent.getValue());
+        byte[] data = BluegigaUtils.fromInts(blueGigaAttributeValueEvent.getValue());
+        if (logger.isTraceEnabled()) {
+            logger.trace("Value read: {} : {}", url, DataConversionUtils.convert(data, 16));
+        }
+        return data;
     }
 
     @Override
@@ -133,9 +138,12 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
             BlueGigaAttributeValueEvent attributeValueEvent = (BlueGigaAttributeValueEvent) event;
             if (attributeValueEvent.getConnection() == connectionHandle
                 && attributeValueEvent.getAttHandle() == characteristicHandle) {
-                logger.trace("Notification received: {}", url);
+                byte[] data = BluegigaUtils.fromInts(attributeValueEvent.getValue());
+                if (logger.isTraceEnabled()) {
+                    logger.trace("Notification received: {} : {}", url, DataConversionUtils.convert(data, 16));
+                }
                 try {
-                    notification.notify(BluegigaUtils.fromInts(attributeValueEvent.getValue()));
+                    notification.notify(data);
                 } catch (Exception ex) {
                     logger.error("Error occurred in changed notification", ex);
                 }
