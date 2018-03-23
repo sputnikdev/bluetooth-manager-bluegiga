@@ -31,6 +31,7 @@ import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaScanResponseEven
 import com.zsmartsystems.bluetooth.bluegiga.eir.EirDataType;
 import com.zsmartsystems.bluetooth.bluegiga.eir.EirFlags;
 import com.zsmartsystems.bluetooth.bluegiga.eir.EirPacket;
+import com.zsmartsystems.bluetooth.bluegiga.enumeration.BgApiResponse;
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BluetoothAddressType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -376,22 +377,33 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
         logger.debug("Trying to connect: {}", url);
         try {
             tryToConnect(addressType);
-        } catch (BluegigaTimeoutException t1) {
-            if (addressType != BluetoothAddressType.UNKNOWN) {
-                throw t1;
+        } catch (BluegigaTimeoutException | BluegigaProcedureException ex) {
+            if (addressType != BluetoothAddressType.UNKNOWN && !isRetriable(ex)) {
+                throw ex;
             }
-            logger.warn("Timeout received. Address type is unknown. Retrying with 'public' address type: {}", url);
+            logger.warn("Exception occurred while connection to a device. Address type is unknown. "
+                    + "Retrying with 'public' address type: {}", url);
             getHandler().bgStopProcedure();
             try {
                 tryToConnect(BluetoothAddressType.GAP_ADDRESS_TYPE_PUBLIC);
-            } catch (BluegigaTimeoutException t2) {
-                logger.warn("Timeout received again. Retrying with 'random' address type: {}", url);
-                getHandler().bgStopProcedure();
-                tryToConnect(BluetoothAddressType.GAP_ADDRESS_TYPE_RANDOM);
+            } catch (BluegigaTimeoutException | BluegigaProcedureException ex2) {
+                if (isRetriable(ex2)) {
+                    logger.warn("Exception occurred again. Retrying with the 'random' address type: {} : {}",
+                            url, ex2.getMessage());
+                    getHandler().bgStopProcedure();
+                    tryToConnect(BluetoothAddressType.GAP_ADDRESS_TYPE_RANDOM);
+                }
             }
         }
         logger.debug("Connected: {}", url);
     }
+
+    private boolean isRetriable(BluegigaException ex) {
+        return ex instanceof BluegigaTimeoutException
+                || ex instanceof BluegigaProcedureException
+                        && ((BluegigaProcedureException) ex).getResponse() == BgApiResponse.WRONG_STATE;
+    }
+
 
     private BluegigaHandler getHandler() {
         if (disposed) {
@@ -417,10 +429,15 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
             logger.debug("Resolving services: {}", url);
             boolean resolved = getHandler().runInSynchronizedContext(() -> {
                 if (!servicesResolved) {
-                    discoverServices();
-                    discoverCharacteristics();
-                    discoverDeclarations();
-                    return true;
+                    try {
+                        discoverServices();
+                        discoverCharacteristics();
+                        discoverDeclarations();
+                        return true;
+                    } catch (Exception ex) {
+                        services.clear();
+                        throw new BluegigaException("Could not discover device attributes: " + url, ex);
+                    }
                 }
                 return false;
             });
