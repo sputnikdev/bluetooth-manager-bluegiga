@@ -21,7 +21,7 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
  */
 
 /**
- * A generic Bluegiga exception.
+ * An exception that describes Bluegiga API interaction timeouts.
  * @author Vlad Kolotov
  */
 public class BluegigaTimeoutException extends BluegigaException {
