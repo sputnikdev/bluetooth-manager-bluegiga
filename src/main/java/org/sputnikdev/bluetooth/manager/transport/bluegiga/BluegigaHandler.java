@@ -140,6 +140,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         try {
             bluegigaHandler.init();
         } catch (Exception ex) {
+            bluegigaHandler.dispose();
             throw new BluegigaException("Could not initialize blugiga handler for port: " + portName, ex);
         }
 
@@ -350,6 +351,7 @@ class BluegigaHandler implements BlueGigaEventListener {
                 return bgHandler.sendTransaction(command, expected, eventWaitTimeout);
             } catch (TimeoutException timeout2) {
                 logger.warn("Timeout has happened second time, giving up: {}", command.getClass().getSimpleName());
+                bgReset();
                 closeBGHandler();
                 throw new BlueGigaException("Bluegiga adapter does not respond for a transaction: "
                         + command.getClass().getSimpleName(), timeout2);
@@ -425,8 +427,8 @@ class BluegigaHandler implements BlueGigaEventListener {
                 throw new BluegigaException("Bluegiga procedure has been interrupted", e);
             }
         }
-        throw new BluegigaException("Could not initiate process: "
-                + completedEventType.getSimpleName() + " / " + response);
+        throw new BluegigaProcedureException("Could not initiate process: "
+                + completedEventType.getSimpleName() + " / " + response, response);
     }
 
     private <E extends BlueGigaResponse, C extends BlueGigaResponse> List<E> callProcedure(
@@ -460,9 +462,9 @@ class BluegigaHandler implements BlueGigaEventListener {
                 throw new BluegigaException("Event receiving process has been interrupted", e);
             }
         }
-        throw new BluegigaException("Could not initiate process: "
+        throw new BluegigaProcedureException("Could not initiate process: "
                 + aggregatedEventType.getSimpleName() + " / "
-                + completedEventType.getSimpleName() + " / " + response);
+                + completedEventType.getSimpleName() + " / " + response, response);
     }
 
     /*
@@ -665,15 +667,6 @@ class BluegigaHandler implements BlueGigaEventListener {
             bgHandler.close(10000);
         }
         if (nrSerialPort != null) {
-            RXTXPort serialPort = nrSerialPort.getSerialPortInstance();
-            if (serialPort != null) {
-                try {
-                    //serialPort.disableReceiveTimeout();
-                    serialPort.removeEventListener();
-                } catch (Exception ex) {
-                    logger.warn("Could not dispose serial port object: {}", ex.getMessage());
-                }
-            }
             // Note: this will fail with a SIGSEGV error on OSX:
             // Problematic frame: C  [librxtxSerial.jnilib+0x312f]  Java_gnu_io_RXTXPort_interruptEventLoop+0x6b
             // It is a known issue of the librxtxSerial lib
@@ -683,6 +676,20 @@ class BluegigaHandler implements BlueGigaEventListener {
                 }).get(5000, TimeUnit.MILLISECONDS);
             } catch (InterruptedException | ExecutionException | TimeoutException e) {
                 logger.warn("Could not disconnect serial port");
+            }
+            RXTXPort serialPort = nrSerialPort.getSerialPortInstance();
+            if (serialPort != null) {
+                try {
+                    //serialPort.disableReceiveTimeout();
+                    serialPort.removeEventListener();
+                } catch (Exception ex) {
+                    logger.warn("Could not dispose serial port object: {}", ex.getMessage());
+                }
+                try {
+                    serialPort.close();
+                } catch (Exception ex) {
+                    logger.warn("Could not close serial port object: {}", ex.getMessage());
+                }
             }
             nrSerialPort = null;
         }
