@@ -127,10 +127,6 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
             }
             return isConnected();
         });
-        if (connected) {
-            notifyConnected(true);
-            discoverAttributes();
-        }
         return connected;
     }
 
@@ -172,7 +168,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     @Override
     public short getRSSI() {
         boolean connected = isConnected();
-        logger.debug("Getting device RSSI: {} : {} (connected) : {} (rssi)", url, connected, rssi);
+        logger.trace("Getting device RSSI: {} : {} (connected) : {} (rssi)", url, connected, rssi);
         if (connected) {
             rssi = getHandler().bgGetRssi(connectionHandle);
         } else if (lastDiscovered == null || lastDiscovered.isBefore(Instant.now().minusSeconds(DISCOVERY_TIMEOUT))) {
@@ -201,13 +197,13 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
 
     @Override
     public boolean isConnected() {
-        logger.debug("Checking if device connected: {} : {}", url, connectionHandle);
+        logger.trace("Checking if device connected: {} : {}", url, connectionHandle);
         if (connectionHandle == -1) {
             return false;
         }
         BlueGigaConnectionStatusEvent connectionStatusEvent = getHandler().getConnectionStatus(connectionHandle);
         if (url.getDeviceAddress().equals(connectionStatusEvent.getAddress())) {
-            logger.trace("Device is connected: {}", url);
+            logger.debug("Device is connected: {} : {}", url, connectionStatusEvent.getFlags());
             return true;
         } else {
             throw new BluegigaException("Inconsistent connection state. "
@@ -225,7 +221,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     @Override
     public void disableConnectedNotifications() {
         logger.debug("Disable connected notifications: {}", url);
-        this.connectedNotification = null;
+        connectedNotification = null;
     }
 
     @Override
@@ -236,13 +232,13 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     @Override
     public void enableServicesResolvedNotifications(Notification<Boolean> notification) {
         logger.debug("Enable service resolved notifications: {}", url);
-        this.serviceResolvedNotification = notification;
+        serviceResolvedNotification = notification;
     }
 
     @Override
     public void disableServicesResolvedNotifications() {
         logger.debug("Disable service resolved notifications: {}", url);
-        this.serviceResolvedNotification = null;
+        serviceResolvedNotification = null;
     }
 
     @Override
@@ -353,7 +349,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
         } catch (Exception ignore) { /* do nothing */ }
         connectionHandle = -1;
         bgHandler.removeEventListener(this);
-        services.clear();
+        disposeServices();
         // just helping GC to release resources
         rssiNotification = null;
         connectedNotification = null;
@@ -374,26 +370,18 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     }
 
     protected void establishConnection() {
-        logger.debug("Trying to connect: {}", url);
+        logger.debug("Trying to connect: {} : {}", url, addressType);
         try {
-            tryToConnect(addressType);
+            tryToConnect(addressType != BluetoothAddressType.UNKNOWN
+                    ? addressType : BluetoothAddressType.GAP_ADDRESS_TYPE_PUBLIC);
         } catch (BluegigaTimeoutException | BluegigaProcedureException ex) {
             if (addressType != BluetoothAddressType.UNKNOWN && !isRetriable(ex)) {
                 throw ex;
             }
-            logger.warn("Exception occurred while connection to a device. Address type is unknown. "
-                    + "Retrying with 'public' address type: {}", url);
+            logger.warn("Exception occurred while connecting to a device. Address type is unknown. "
+                    + "Retrying with 'random' address type: {}", url);
             getHandler().bgStopProcedure();
-            try {
-                tryToConnect(BluetoothAddressType.GAP_ADDRESS_TYPE_PUBLIC);
-            } catch (BluegigaTimeoutException | BluegigaProcedureException ex2) {
-                if (isRetriable(ex2)) {
-                    logger.warn("Exception occurred again. Retrying with the 'random' address type: {} : {}",
-                            url, ex2.getMessage());
-                    getHandler().bgStopProcedure();
-                    tryToConnect(BluetoothAddressType.GAP_ADDRESS_TYPE_RANDOM);
-                }
-            }
+            tryToConnect(BluetoothAddressType.GAP_ADDRESS_TYPE_PUBLIC);
         }
         logger.debug("Connected: {}", url);
     }
@@ -415,7 +403,7 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     private void handleConnectionStatusEvent(BlueGigaConnectionStatusEvent event) {
         if (event.getAddress().equals(url.getDeviceAddress())
                 && (connectionHandle == -1 || !servicesResolved)) {
-            logger.debug("Connection event received: {}", url);
+            logger.debug("Connection event received: {} : {}", url, event.getConnection());
             if (connectionHandle == -1) {
                 connectionHandle = event.getConnection();
                 notifyConnected(true);
@@ -425,27 +413,29 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     }
 
     private void discoverAttributes() {
-        if (!servicesResolved) {
-            logger.debug("Resolving services: {}", url);
+        if (!servicesResolved && connectionHandle >= 0) {
             boolean resolved = getHandler().runInSynchronizedContext(() -> {
                 if (!servicesResolved) {
+                    logger.debug("Resolving services: {}", url);
                     try {
                         discoverServices();
                         discoverCharacteristics();
                         discoverDeclarations();
+                        servicesResolved = true;
+                        logger.debug("Services resolved: {}", url);
                         return true;
                     } catch (Exception ex) {
-                        services.clear();
-                        throw new BluegigaException("Could not discover device attributes: " + url, ex);
+                        disposeServices();
+                        logger.warn("Could not discover device attributes: {}", url, ex);
+                        //throw new BluegigaException("Could not discover device attributes: " + url, ex);
                     }
                 }
                 return false;
             });
             if (resolved) {
-                serviceResolved();
+                notifyServicesResolved(true);
             }
         }
-        logger.debug("Services resolved: {} / {}", servicesResolved, url);
     }
 
     private void tryToConnect(BluetoothAddressType addressType) {
@@ -589,16 +579,11 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
     }
 
     private void servicesUnresolved() {
-        services.clear();
+        disposeServices();
         if (servicesResolved) {
             notifyServicesResolved(false);
         }
         servicesResolved = false;
-    }
-
-    private void serviceResolved() {
-        servicesResolved = true;
-        notifyServicesResolved(true);
     }
 
     private void notifyRSSIChanged(short rssi) {
@@ -757,6 +742,12 @@ class BluegigaDevice implements Device, BlueGigaEventListener {
         return services.values().stream()
                     .filter(service -> handle >= service.getHandleStart() && handle <= service.getHandleEnd())
                     .findFirst().orElse(null);
+    }
+
+    private void disposeServices() {
+        services.values().stream().flatMap(service -> service.getCharacteristics().stream())
+                .forEach(characteristic -> ((BluegigaCharacteristic) characteristic).dispose());
+        services.clear();
     }
 
 }

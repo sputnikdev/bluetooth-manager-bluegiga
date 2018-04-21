@@ -217,10 +217,7 @@ public class BluegigaFactory implements BluetoothObjectFactory {
                 return adapter;
             });
         } else if (bluegigaURL.isCharacteristic()) {
-            // just disconnect corresponding device so that characteristic becomes invalidated
-            Optional.ofNullable(adapters.get(bluegigaURL.getAdapterURL()))
-                    .map(adapter -> adapter.getDevice(bluegigaURL.getDeviceURL()))
-                    .ifPresent(BluegigaDevice::disconnect);
+            // do nothing
         }
     }
 

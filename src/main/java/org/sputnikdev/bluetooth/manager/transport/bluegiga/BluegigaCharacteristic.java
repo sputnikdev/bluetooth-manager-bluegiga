@@ -45,8 +45,8 @@ import java.util.stream.Collectors;
  */
 class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
 
-    private static final byte NOTIFYING_FLAG = 0b01;
-    private static final byte INDICATING_FLAG = 0b10;
+    private static final byte NOTIFYING_FLAG = 0x01;
+    private static final byte INDICATING_FLAG = 0x10;
     private static final String CONFIGURATION_UUID = "00002902-0000-1000-8000-00805f9b34fb";
 
     private final Logger logger = LoggerFactory.getLogger(BluegigaCharacteristic.class);
@@ -64,7 +64,6 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
         this.url = url;
         this.connectionHandle = connectionHandle;
         this.characteristicHandle = characteristicHandle;
-        this.bgHandler.addEventListener(this);
     }
 
     @Override
@@ -104,11 +103,11 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
     public boolean writeValue(byte[] bytes) {
         logger.debug("Writing value: {}", url);
         int[] data = BluegigaUtils.fromBytes(bytes);
-        if (flags.contains(CharacteristicAccessType.WRITE_WITHOUT_RESPONSE)) {
-            return bgHandler.writeCharacteristicWithoutResponse(connectionHandle, characteristicHandle, data);
-        } else {
+        if (flags.contains(CharacteristicAccessType.WRITE)) {
             return bgHandler.writeCharacteristic(connectionHandle, characteristicHandle, data)
                     .getResult() == BgApiResponse.SUCCESS;
+        } else {
+            return bgHandler.writeCharacteristicWithoutResponse(connectionHandle, characteristicHandle, data);
         }
     }
 
@@ -192,19 +191,30 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
             return;
         }
 
-        byte[] config = {0x0};
+        byte[] config = {0x00, 0x00};
 
         if (enabled) {
             if (flags.contains(CharacteristicAccessType.NOTIFY)) {
-                config = new byte[] {NOTIFYING_FLAG};
+                config = new byte[] {NOTIFYING_FLAG, 0x00};
             } else if (flags.contains(CharacteristicAccessType.INDICATE)) {
-                config = new byte[] {INDICATING_FLAG};
+                config = new byte[] {INDICATING_FLAG, 0x00};
             }
+        }
+
+        if (enabled) {
+            bgHandler.addEventListener(this);
+        } else {
+            bgHandler.removeEventListener(this);
         }
 
         if (!configuration.writeValue(config)) {
             throw new BluegigaException("Could not configure characteristic (enable/disable) notification: " + enabled);
         }
+    }
+
+    protected void dispose() {
+        descriptors.clear();
+        bgHandler.removeEventListener(this);
     }
 
     private byte[] getConfiguration() {

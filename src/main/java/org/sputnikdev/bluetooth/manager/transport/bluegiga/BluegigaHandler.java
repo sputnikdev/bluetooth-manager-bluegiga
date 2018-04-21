@@ -54,6 +54,7 @@ import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaDiscoverCommand;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaDiscoverResponse;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaEndProcedureCommand;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaEndProcedureResponse;
+import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaScanResponseEvent;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaSetModeCommand;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaSetModeResponse;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaSetScanParametersCommand;
@@ -236,19 +237,21 @@ class BluegigaHandler implements BlueGigaEventListener {
             retryCount++;
             try {
                 Thread.sleep(500);
-            } catch (InterruptedException ignore) { /* do nothinf */ }
+            } catch (InterruptedException ignore) { /* do nothing */ }
         }
         return result;
     }
 
     private BlueGigaProcedureCompletedEvent writeCharacteristicWithResponse(int connectionHandle,
                                                                   int characteristicHandle, int[] data) {
+        logger.debug("Write characteristic with response: {} / {}", connectionHandle, characteristicHandle);
         return syncCall(BlueGigaProcedureCompletedEvent.class,
             p -> p.getConnection() == connectionHandle && p.getChrHandle() == characteristicHandle,
             () -> bgWriteCharacteristic(connectionHandle, characteristicHandle, data));
     }
 
     protected boolean writeCharacteristicWithoutResponse(int connectionHandle, int characteristicHandle, int[] data) {
+        logger.debug("Write characteristic without response: {} / {}", connectionHandle, characteristicHandle);
         synchronized (eventsCaptor) {
             return bgWriteCharacteristic(connectionHandle, characteristicHandle, data) == BgApiResponse.SUCCESS;
         }
@@ -288,6 +291,7 @@ class BluegigaHandler implements BlueGigaEventListener {
     }
 
     protected boolean bgStopProcedure() {
+        logger.debug("Stopping procedures");
         synchronized (eventsCaptor) {
             BlueGigaEndProcedureResponse response =
                     sendTransaction(new BlueGigaEndProcedureCommand(), BlueGigaEndProcedureResponse.class);
@@ -343,6 +347,7 @@ class BluegigaHandler implements BlueGigaEventListener {
 
     private <T extends BlueGigaResponse> T sendTransaction(BlueGigaCommand command, Class<T> expected) {
         try {
+            logger.debug("Sending transaction: {}", command);
             return bgHandler.sendTransaction(command, expected, eventWaitTimeout);
         } catch (TimeoutException timeout) {
             logger.warn("Timeout has happened while sending a transaction, retry one more time: {}",
@@ -351,7 +356,7 @@ class BluegigaHandler implements BlueGigaEventListener {
                 return bgHandler.sendTransaction(command, expected, eventWaitTimeout);
             } catch (TimeoutException timeout2) {
                 logger.warn("Timeout has happened second time, giving up: {}", command.getClass().getSimpleName());
-                bgReset();
+                //bgReset();
                 closeBGHandler();
                 throw new BlueGigaException("Bluegiga adapter does not respond for a transaction: "
                         + command.getClass().getSimpleName(), timeout2);
@@ -373,6 +378,7 @@ class BluegigaHandler implements BlueGigaEventListener {
     private <T extends BlueGigaResponse> T syncCall(Class<T> completedEventType, Predicate<T> completionPredicate,
                                                     Supplier<BgApiResponse> initialCommand) {
         synchronized (eventsCaptor) {
+            logger.debug("Sync call: {} ", completedEventType.getSimpleName());
             eventsCaptor.setCompletedEventType(completedEventType);
             eventsCaptor.setCompletionPredicate(completionPredicate);
             try {
@@ -489,7 +495,7 @@ class BluegigaHandler implements BlueGigaEventListener {
         int connIntervalMin = 60;
         int connIntervalMax = 100;
         int latency = 0;
-        int timeout = 1000;
+        int timeout = 2000;
 
         BlueGigaConnectDirectCommand connect = new BlueGigaConnectDirectCommand();
         connect.setAddress(url.getDeviceAddress());
@@ -674,8 +680,8 @@ class BluegigaHandler implements BlueGigaEventListener {
                 CompletableFuture.runAsync(() -> {
                     nrSerialPort.disconnect();
                 }).get(5000, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException | ExecutionException | TimeoutException e) {
-                logger.warn("Could not disconnect serial port");
+            } catch (Exception e) {
+                logger.warn("Could not disconnect serial port: {}", e.getMessage());
             }
             RXTXPort serialPort = nrSerialPort.getSerialPortInstance();
             if (serialPort != null) {
@@ -686,9 +692,9 @@ class BluegigaHandler implements BlueGigaEventListener {
                     logger.warn("Could not dispose serial port object: {}", ex.getMessage());
                 }
                 try {
-                    serialPort.close();
-                } catch (Exception ex) {
-                    logger.warn("Could not close serial port object: {}", ex.getMessage());
+                    CompletableFuture.runAsync(serialPort::close).get(5000, TimeUnit.MILLISECONDS);
+                } catch (Exception e) {
+                    logger.warn("Could not close serial port object: {}", e.getMessage());
                 }
             }
             nrSerialPort = null;
