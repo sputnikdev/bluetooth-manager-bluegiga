@@ -37,6 +37,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -45,9 +46,9 @@ import java.util.stream.Collectors;
  */
 class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
 
-    private static final byte NOTIFYING_FLAG = 0x01;
-    private static final byte INDICATING_FLAG = 0x10;
-    private static final String CONFIGURATION_UUID = "00002902-0000-1000-8000-00805f9b34fb";
+    private static final byte NOTIFYING_FLAG = 0b01;
+    private static final byte INDICATING_FLAG = 0b10;
+    private static final UUID CONFIGURATION_UUID = UUID.fromString("00002902-0000-0000-0000-000000000000");
 
     private final Logger logger = LoggerFactory.getLogger(BluegigaCharacteristic.class);
     private final URL url;
@@ -56,7 +57,7 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
     private final BluegigaHandler bgHandler;
     private Set<CharacteristicAccessType> flags = new HashSet<>();
     private Notification<byte[]> valueNotification;
-    private final Map<URL, BluegigaDescriptor> descriptors = new HashMap<>();
+    private final Map<UUID, BluegigaDescriptor> descriptors = new HashMap<>();
 
     protected BluegigaCharacteristic(BluegigaHandler bgHandler, URL url,
                                      int connectionHandle, int characteristicHandle) {
@@ -165,7 +166,7 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
 
     protected void addDescriptor(BluegigaDescriptor descriptor) {
         synchronized (descriptors) {
-            descriptors.put(descriptor.getURL(), descriptor);
+            descriptors.put(descriptor.getUuid(), descriptor);
         }
     }
 
@@ -226,6 +227,6 @@ class BluegigaCharacteristic implements Characteristic, BlueGigaEventListener {
     }
 
     private BluegigaDescriptor getNotificationConfigurationDescriptor() {
-        return descriptors.get(url.copyWithCharacteristic(CONFIGURATION_UUID));
+        return descriptors.get(CONFIGURATION_UUID);
     }
 }

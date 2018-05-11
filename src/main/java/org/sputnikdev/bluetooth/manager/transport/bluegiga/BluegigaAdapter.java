@@ -22,6 +22,7 @@ package org.sputnikdev.bluetooth.manager.transport.bluegiga;
 
 import com.zsmartsystems.bluetooth.bluegiga.BlueGigaEventListener;
 import com.zsmartsystems.bluetooth.bluegiga.BlueGigaResponse;
+import com.zsmartsystems.bluetooth.bluegiga.command.connection.BlueGigaConnectionStatusEvent;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaScanResponseEvent;
 import com.zsmartsystems.bluetooth.bluegiga.command.system.BlueGigaGetInfoResponse;
 import org.slf4j.Logger;
@@ -140,6 +141,21 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
                             bluegigaDevice.getName(), bluegigaDevice.getRSSI());
                 }
             }
+        } else if (event instanceof BlueGigaConnectionStatusEvent) {
+            BlueGigaConnectionStatusEvent connectionStatusEvent = (BlueGigaConnectionStatusEvent) event;
+            if (!"00:00:00:00:00:00".equals(connectionStatusEvent.getAddress())) {
+                synchronized (devices) {
+                    URL deviceURL = getURL().copyWithDevice(connectionStatusEvent.getAddress());
+                    if (!devices.containsKey(deviceURL)) {
+                        logger.debug("A connection event received: {}", deviceURL);
+                        BluegigaDevice bluegigaDevice = createDevice(deviceURL, connectionStatusEvent);
+                        devices.put(deviceURL, bluegigaDevice);
+                        bluegigaDevice.bluegigaEventReceived(connectionStatusEvent);
+                        logger.debug("Created new device: {} ({}) {} ", bluegigaDevice.getURL().getDeviceAddress(),
+                                bluegigaDevice.getName(), bluegigaDevice.getRSSI());
+                    }
+                }
+            }
         }
     }
 
@@ -179,17 +195,22 @@ class BluegigaAdapter implements Adapter, BlueGigaEventListener {
             if (devices.containsKey(deviceURL)) {
                 logger.debug("Device exists: {}", deviceURL);
                 return devices.get(deviceURL);
-            } else {
-                BluegigaDevice bluegigaDevice = createDevice(deviceURL);
-                devices.put(deviceURL, bluegigaDevice);
-                return bluegigaDevice;
             }
         }
+        return null;
     }
 
     protected BluegigaDevice createDevice(URL address) {
         logger.debug("Creating a new device: {}", address);
         BluegigaDevice device = new BluegigaDevice(bgHandler, address);
+        logger.debug("Device created: {} / {}", address, Integer.toHexString(device.hashCode()));
+        return device;
+    }
+
+    protected BluegigaDevice createDevice(URL address, BlueGigaConnectionStatusEvent event) {
+        logger.debug("Creating a new device from a connection status event: {} : {}",
+                address, event.getConnection());
+        BluegigaDevice device = new BluegigaDevice(bgHandler, address, event.getConnection(), event.getAddressType());
         logger.debug("Device created: {} / {}", address, Integer.toHexString(device.hashCode()));
         return device;
     }

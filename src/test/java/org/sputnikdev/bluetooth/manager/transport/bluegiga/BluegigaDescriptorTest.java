@@ -8,10 +8,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.runners.MockitoJUnitRunner;
-import org.sputnikdev.bluetooth.URL;
-import org.sputnikdev.bluetooth.manager.transport.CharacteristicAccessType;
 
-import java.util.EnumSet;
+import java.util.UUID;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.mock;
@@ -23,8 +21,7 @@ import static org.mockito.Mockito.when;
 @RunWith(MockitoJUnitRunner.class)
 public class BluegigaDescriptorTest {
 
-    private static final URL DESCRIPTOR_URL = new URL("/12:34:56:78:90:12/11:22:33:44:55:66/" +
-        "0000180f-0000-1000-8000-00805f9b34fb/00002902-0000-1000-8000-00805f9b34fb");
+    private static final UUID DESCRIPTOR_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
     private static final int CONNECTION_HANDLE = 1;
     private static final int DESCRIPTOR_HANDLE = 3;
 
@@ -35,7 +32,7 @@ public class BluegigaDescriptorTest {
 
     @Before
     public void setUp() {
-        descriptor = new BluegigaDescriptor(bluegigaHandler, DESCRIPTOR_URL, CONNECTION_HANDLE, DESCRIPTOR_HANDLE);
+        descriptor = new BluegigaDescriptor(bluegigaHandler, CONNECTION_HANDLE, DESCRIPTOR_HANDLE, DESCRIPTOR_UUID);
     }
 
     @Test
@@ -73,8 +70,8 @@ public class BluegigaDescriptorTest {
     }
 
     @Test
-    public void getURL() throws Exception {
-        assertEquals(DESCRIPTOR_URL, descriptor.getURL());
+    public void getUUID() throws Exception {
+        assertEquals(DESCRIPTOR_UUID, descriptor.getUuid());
     }
 
 }

@@ -236,8 +236,7 @@ public class BluegigaAdapterTest {
         assertEquals(existingDeviceAddress, existingDevice.getURL().getDeviceAddress());
 
         Device newDevice = bluegigaAdapter.getDevice(ADAPTER_URL.copyWithDevice(newDeviceAddress));
-        assertNotNull(newDevice);
-        assertEquals(newDeviceAddress, newDevice.getURL().getDeviceAddress());
+        assertNull(newDevice);
     }
 
     private BlueGigaScanResponseEvent mockDevice(String address) {

@@ -15,6 +15,7 @@ import org.sputnikdev.bluetooth.manager.transport.Notification;
 
 import java.util.EnumSet;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -55,8 +56,7 @@ public class BluegigaCharacteristicTest {
         characteristic = spy(new BluegigaCharacteristic(bluegigaHandler, CHARACTERISTIC_URL,
             CONNECTION_HANDLE, CHARACTERISTIC_HANDLE));
 
-        when(notificationDescriptor.getURL()).thenReturn(
-            CHARACTERISTIC_URL.copyWithCharacteristic("00002902-0000-1000-8000-00805f9b34fb"));
+        when(notificationDescriptor.getUuid()).thenReturn(UUID.fromString("00002902-0000-0000-0000-000000000000"));
     }
 
     @Test
@@ -155,11 +155,11 @@ public class BluegigaCharacteristicTest {
 
         characteristic.setFlags(EnumSet.of(CharacteristicAccessType.NOTIFY));
         characteristic.toggleNotification(true);
-        verify(notificationDescriptor).writeValue(new byte[] {0b1});
+        verify(notificationDescriptor).writeValue(new byte[] {0b01, 0b0});
 
         characteristic.setFlags(EnumSet.of(CharacteristicAccessType.INDICATE));
         characteristic.toggleNotification(true);
-        verify(notificationDescriptor).writeValue(new byte[] {0b10});
+        verify(notificationDescriptor).writeValue(new byte[] {0b10, 0b0});
     }
 
     @Test

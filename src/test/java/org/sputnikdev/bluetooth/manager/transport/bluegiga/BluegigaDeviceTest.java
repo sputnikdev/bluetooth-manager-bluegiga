@@ -42,6 +42,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.anyInt;
@@ -149,18 +150,6 @@ public class BluegigaDeviceTest {
     }
 
     @Test
-    public void testConnectOrderOfOperations() {
-        assertTrue(bluegigaDevice.connect());
-
-        InOrder inOrder = Mockito.inOrder(bluegigaDevice);
-        inOrder.verify(bluegigaDevice).establishConnection();
-        inOrder.verify(bluegigaDevice).discoverServices();
-        inOrder.verify(bluegigaDevice).discoverCharacteristics();
-        inOrder.verify(bluegigaDevice).discoverDeclarations();
-        inOrder.verifyNoMoreInteractions();
-    }
-
-    @Test
     public void testConnect() {
         bluegigaDevice.enableConnectedNotifications(booleanNotification);
         BlueGigaConnectionStatusEvent event = mockConnectionStatusEvent();
@@ -168,11 +157,17 @@ public class BluegigaDeviceTest {
 
         assertTrue(bluegigaDevice.connect());
 
-        verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.UNKNOWN);
-        verify(bluegigaHandler).getServices(CONNECTION_HANDLE);
-        verify(bluegigaHandler).getCharacteristics(CONNECTION_HANDLE);
-        verify(bluegigaHandler).getDeclarations(CONNECTION_HANDLE);
+        verify(bluegigaDevice).establishConnection();
+        // if address type is unknown (default value), then we try to optimize it by guessing that the address is public
+        verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.GAP_ADDRESS_TYPE_PUBLIC);
         verify(booleanNotification).notify(true);
+
+        // attributes should not be discovered as a part of connect procedure,
+        // a connection event should trigger this instead
+        verify(bluegigaHandler, never()).getServices(CONNECTION_HANDLE);
+        verify(bluegigaHandler, never()).getCharacteristics(CONNECTION_HANDLE);
+        verify(bluegigaHandler, never()).getDeclarations(CONNECTION_HANDLE);
+
         assertEquals(CONNECTION_HANDLE, bluegigaDevice.getConnectionHandle());
     }
 
@@ -215,30 +210,42 @@ public class BluegigaDeviceTest {
         when(bluegigaHandler.connect(eq(DEVICE_URL), any())).thenReturn(event);
 
         assertTrue(bluegigaDevice.connect());
-        verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.UNKNOWN);
+        // if address type is unknown, we are trying to guess that it is public first
+        verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.GAP_ADDRESS_TYPE_PUBLIC);
         bluegigaDevice.disconnect();
 
         bluegigaDevice.bluegigaEventReceived(mockScanResponse((short) -100,
                 BluetoothAddressType.GAP_ADDRESS_TYPE_PUBLIC));
         assertTrue(bluegigaDevice.connect());
-        verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.GAP_ADDRESS_TYPE_PUBLIC);
+        verify(bluegigaHandler, times(2)).connect(DEVICE_URL, BluetoothAddressType.GAP_ADDRESS_TYPE_PUBLIC);
         bluegigaDevice.disconnect();
 
         bluegigaDevice.bluegigaEventReceived(mockScanResponse((short) -100,
                 BluetoothAddressType.GAP_ADDRESS_TYPE_RANDOM));
         assertTrue(bluegigaDevice.connect());
         verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.GAP_ADDRESS_TYPE_RANDOM);
+        bluegigaDevice.disconnect();
+    }
+
+    @Test
+    public void testConnectAddressTypeRetryBluegigaTimeoutException() {
+        assertConnectAddressTypeRetry(BluegigaTimeoutException.class);
+    }
+
+    @Test
+    public void testConnectAddressTypeRetryBluegigaProcedureException() {
+        assertConnectAddressTypeRetry(BluegigaProcedureException.class);
     }
 
     @Test
     public void testConnectStopDiscovery() {
-        // this test not only perform testing of the connection procedure but also includes testing for the woraround
+        // this test not only perform testing of the connection procedure but also includes testing for the workaround
         // of a Bluegiga bug, read some comments in the BluegigaDevice.connect method.
 
         when(bluegigaHandler.isDiscovering()).thenReturn(true);
 
         // mocking some stuff for the connection procedure
-        // performing the invokaction
+        // performing the invocation
         BlueGigaConnectionStatusEvent event = mockConnectionStatusEvent();
         when(bluegigaHandler.connect(DEVICE_URL, BluetoothAddressType.UNKNOWN)).thenReturn(event);
 
@@ -246,12 +253,9 @@ public class BluegigaDeviceTest {
 
         InOrder inOrder = Mockito.inOrder(bluegigaHandler);
         inOrder.verify(bluegigaHandler).isDiscovering();
-        inOrder.verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.UNKNOWN);
+        inOrder.verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.GAP_ADDRESS_TYPE_PUBLIC);
         inOrder.verify(bluegigaHandler).bgStopProcedure();
         inOrder.verify(bluegigaHandler).bgStartScanning();
-        inOrder.verify(bluegigaHandler).getServices(CONNECTION_HANDLE);
-        inOrder.verify(bluegigaHandler).getCharacteristics(CONNECTION_HANDLE);
-        inOrder.verify(bluegigaHandler).getDeclarations(CONNECTION_HANDLE);
     }
 
     @Test
@@ -402,7 +406,7 @@ public class BluegigaDeviceTest {
         verifyNoMoreInteractions(bluegigaHandler);
 
         when(bluegigaHandler.bgGetRssi(anyInt())).thenReturn((short) -77);
-        doReturn(true).when(bluegigaDevice).isConnected();
+        bluegigaDevice.connect();
 
         assertEquals(-77, bluegigaDevice.getRSSI());
     }
@@ -437,11 +441,11 @@ public class BluegigaDeviceTest {
         assertFalse(bluegigaDevice.isConnected());
 
         verify(connectionStatusEvent).getConnection();
-        verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.UNKNOWN);
+        verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.GAP_ADDRESS_TYPE_PUBLIC);
         verify(bluegigaHandler).disconnect(CONNECTION_HANDLE);
     }
 
-    @Test(expected = BluegigaException.class)
+    @Test
     public void testIsConnectedInconsistency() {
         when(bluegigaHandler.disconnect(CONNECTION_HANDLE)).thenReturn(mock(BlueGigaDisconnectedEvent.class));
 
@@ -481,16 +485,14 @@ public class BluegigaDeviceTest {
         bluegigaDevice.enableServicesResolvedNotifications(booleanNotification);
 
         BlueGigaConnectionStatusEvent event = mockConnectionStatusEvent();
-        when(bluegigaHandler.connect(DEVICE_URL, BluetoothAddressType.UNKNOWN)).thenReturn(event);
-
-        bluegigaDevice.connect();
+        bluegigaDevice.bluegigaEventReceived(event);
         verify(booleanNotification).notify(true);
 
         bluegigaDevice.disconnect();
         verify(booleanNotification).notify(false);
 
         bluegigaDevice.disableServicesResolvedNotifications();
-        bluegigaDevice.connect();
+        bluegigaDevice.bluegigaEventReceived(event);
         bluegigaDevice.disconnect();
 
         verifyNoMoreInteractions(booleanNotification);
@@ -510,9 +512,23 @@ public class BluegigaDeviceTest {
 
     @Test
     public void testGetService() {
-        bluegigaDevice.connect();
+        assertFalse(bluegigaDevice.isConnected());
+        BlueGigaConnectionStatusEvent event = mockConnectionStatusEvent();
+        bluegigaDevice.bluegigaEventReceived(event);
         assertTrue(bluegigaDevice.isConnected());
         assertNotNull(bluegigaDevice.getService(BATTERY_SERVICE_URL));
+    }
+
+    @Test
+    public void testBluegigaEventReceivedConnect() {
+        Notification<Boolean> connectedNotification = mock(Notification.class);
+        bluegigaDevice.enableConnectedNotifications(connectedNotification);
+        BlueGigaConnectionStatusEvent event = mockConnectionStatusEvent();
+
+        bluegigaDevice.bluegigaEventReceived(event);
+
+        assertTrue(bluegigaDevice.isConnected());
+        verify(connectedNotification).notify(true);
     }
 
     @Test
@@ -526,7 +542,10 @@ public class BluegigaDeviceTest {
         bluegigaDevice.bluegigaEventReceived(mockScanResponse((short) -100));
         assertEquals(-100, bluegigaDevice.getRSSI());
 
-        bluegigaDevice.connect();
+        // connecting
+        BlueGigaConnectionStatusEvent event = mockConnectionStatusEvent();
+        bluegigaDevice.bluegigaEventReceived(event);
+
         assertTrue(bluegigaDevice.isConnected());
 
         BlueGigaDisconnectedEvent disconnectedEvent = mock(BlueGigaDisconnectedEvent.class);
@@ -547,6 +566,60 @@ public class BluegigaDeviceTest {
         assertFalse(bluegigaDevice.isConnected());
         verify(connectedNotification).notify(false);
         verify(servicesResovedNotification).notify(false);
+    }
+
+    @Test
+    public void testBluegigaEventReceivedNotConnectedException() {
+        Notification<Boolean> connectedNotification = mock(Notification.class);
+        bluegigaDevice.enableConnectedNotifications(connectedNotification);
+
+        BluegigaProcedureException ex = new BluegigaProcedureException("error", BgApiResponse.NOT_CONNECTED);
+        doThrow(ex).when(bluegigaDevice).discoverAttributes();
+
+        // connecting
+        bluegigaDevice.connect();
+        assertTrue(bluegigaDevice.isConnected());
+        verify(connectedNotification).notify(true);
+
+        // receiving an event
+        BlueGigaConnectionStatusEvent event = mockConnectionStatusEvent();
+        bluegigaDevice.bluegigaEventReceived(event);
+
+        assertFalse(bluegigaDevice.isConnected());
+        verify(connectedNotification).notify(false);
+    }
+
+    @Test
+    public void testBluegigaEventReceivedUnexpectedException() {
+        Notification<Boolean> connectedNotification = mock(Notification.class);
+        bluegigaDevice.enableConnectedNotifications(connectedNotification);
+
+        doThrow(RuntimeException.class).when(bluegigaDevice).discoverAttributes();
+
+        // connecting
+        bluegigaDevice.connect();
+        assertTrue(bluegigaDevice.isConnected());
+        verify(connectedNotification).notify(true);
+
+        // receiving an event, device is still connected
+        BlueGigaConnectionStatusEvent eventConnected = mockConnectionStatusEvent();
+        BlueGigaConnectionStatusEvent statusEvent = mockConnectionStatusEvent();
+        when(statusEvent.getAddress()).thenReturn(DEVICE_URL.getDeviceAddress());
+        when(bluegigaHandler.getConnectionStatus(CONNECTION_HANDLE)).thenReturn(statusEvent);
+        bluegigaDevice.bluegigaEventReceived(eventConnected);
+
+        assertTrue(bluegigaDevice.isConnected());
+        verify(connectedNotification, never()).notify(false);
+
+        // receiving an event, device is not connected
+        eventConnected = mockConnectionStatusEvent();
+        statusEvent = mockConnectionStatusEvent();
+        when(statusEvent.getAddress()).thenReturn("wrong address");
+        when(bluegigaHandler.getConnectionStatus(CONNECTION_HANDLE)).thenReturn(statusEvent);
+        bluegigaDevice.bluegigaEventReceived(eventConnected);
+
+        assertFalse(bluegigaDevice.isConnected());
+        verify(connectedNotification).notify(false);
     }
 
     @Test
@@ -640,6 +713,20 @@ public class BluegigaDeviceTest {
         when(event.getAddress()).thenReturn(DEVICE_URL.getDeviceAddress());
         when(bluegigaHandler.connect(DEVICE_URL, BluetoothAddressType.UNKNOWN)).thenReturn(event);
         return event;
+    }
+
+    private void assertConnectAddressTypeRetry(Class<? extends Exception> expected) {
+        doThrow(expected).when(bluegigaHandler).connect(eq(DEVICE_URL), any());
+        try {
+            bluegigaDevice.connect();
+            fail();
+        } catch (Exception ex) {
+            assertTrue(ex.getClass().isAssignableFrom(expected));
+        }
+        // if address type is unknown, we are trying to guess that it is public first
+        verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.GAP_ADDRESS_TYPE_PUBLIC);
+        // BluegigaTimeoutException has thrown, we try again but with random address now
+        verify(bluegigaHandler).connect(DEVICE_URL, BluetoothAddressType.GAP_ADDRESS_TYPE_RANDOM);
     }
 
 }

@@ -54,7 +54,6 @@ import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaDiscoverCommand;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaDiscoverResponse;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaEndProcedureCommand;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaEndProcedureResponse;
-import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaScanResponseEvent;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaSetModeCommand;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaSetModeResponse;
 import com.zsmartsystems.bluetooth.bluegiga.command.gap.BlueGigaSetScanParametersCommand;
@@ -88,7 +87,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -100,12 +98,17 @@ import java.util.function.Supplier;
  */
 class BluegigaHandler implements BlueGigaEventListener {
 
-    private static final long DEFAULT_WAIT_TIME = 5000;
+    private static final long DEFAULT_WAIT_TIME = 10000;
 
     private final Logger logger = LoggerFactory.getLogger(BluegigaHandler.class);
 
-    private static final int ACTIVE_SCAN_INTERVAL = 0x40;
-    private static final int ACTIVE_SCAN_WINDOW = 0x20;
+
+    private static final int ACTIVE_SCAN_INTERVAL = 0x4000; // min 0x4, default 0x4B, max 0x4000
+    private static final int ACTIVE_SCAN_WINDOW = 0x4000; // min 0x4, default 0x32, max 0x4000
+    private static final int CONNECTION_INTERVAL_MIN = 6;
+    private static final int CONNECTION_INTERVAL_MAX = 3200;
+    private static final int CONNECTION_LATENCY = 0;
+    private static final int CONNECTION_TIMEOUT = 3200;
 
     // The Serial port name
     private String portName;
@@ -492,18 +495,37 @@ class BluegigaHandler implements BlueGigaEventListener {
         // BG spec: This parameter configures the slave latency. Slave latency defines how many connection intervals
         // a slave device can skip. Increasing slave latency will decrease the energy consumption of the slave
         // in scenarios where slave does not have data to send at every connection interval.
-        int connIntervalMin = 60;
-        int connIntervalMax = 100;
-        int latency = 0;
-        int timeout = 2000;
+
+        /*
+            connIntervalMin:
+                Minimum Connection Interval (in units of 1.25ms).
+                Range: 6 - 3200
+                The lowest possible Connection Interval is 7.50ms and the largest is 4000ms.
+            connIntervalMax:
+                Maximum Connection Interval (in units of 1.25ms).
+                Range: 6 - 3200
+                Must be equal or bigger than minimum Connection Interval
+            timeout:
+                Supervision Timeout (in units of 10ms). The Supervision Timeout
+                defines how long the devices can be out of range before the
+                connection is closed.
+                Range: 10 - 3200
+                Minimum time for the Supervision Timeout is 100ms and maximum
+                value is 32000ms.
+                 Silicon Labs Page of 102 233
+                Byte Type Name Description
+                According to the specification, the Supervision Timeout in
+                milliseconds shall be larger than (1 + latency) * conn_interval_max
+                * 2, where conn_interval_max is given in milliseconds.
+         */
 
         BlueGigaConnectDirectCommand connect = new BlueGigaConnectDirectCommand();
         connect.setAddress(url.getDeviceAddress());
         connect.setAddrType(bluetoothAddressType);
-        connect.setConnIntervalMin(connIntervalMin);
-        connect.setConnIntervalMax(connIntervalMax);
-        connect.setLatency(latency);
-        connect.setTimeout(timeout);
+        connect.setConnIntervalMin(CONNECTION_INTERVAL_MIN);
+        connect.setConnIntervalMax(CONNECTION_INTERVAL_MAX);
+        connect.setLatency(CONNECTION_LATENCY);
+        connect.setTimeout(CONNECTION_TIMEOUT);
         BlueGigaConnectDirectResponse connectResponse = sendTransaction(connect, BlueGigaConnectDirectResponse.class);
         return connectResponse.getResult();
     }

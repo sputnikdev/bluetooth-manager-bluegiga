@@ -25,8 +25,9 @@ import com.zsmartsystems.bluetooth.bluegiga.command.attributeclient.BlueGigaProc
 import com.zsmartsystems.bluetooth.bluegiga.enumeration.BgApiResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.sputnikdev.bluetooth.URL;
 import org.sputnikdev.bluetooth.manager.transport.Descriptor;
+
+import java.util.UUID;
 
 /**
  * Bluegiga transport descriptor.
@@ -36,21 +37,21 @@ class BluegigaDescriptor implements Descriptor {
 
     private final Logger logger = LoggerFactory.getLogger(BluegigaDescriptor.class);
 
-    private final URL url;
     private final int connectionHandle;
     private final int descriptorHandle;
+    private final UUID uuid;
     private final BluegigaHandler bgHandler;
 
-    BluegigaDescriptor(BluegigaHandler bgHandler, URL url, int connectionHandle, int descriptorHandle) {
+    BluegigaDescriptor(BluegigaHandler bgHandler, int connectionHandle, int descriptorHandle, UUID uuid) {
         this.bgHandler = bgHandler;
-        this.url = url;
         this.connectionHandle = connectionHandle;
         this.descriptorHandle = descriptorHandle;
+        this.uuid = uuid;
     }
 
     @Override
     public byte[] readValue() {
-        logger.debug("Reading value: {}", url);
+        logger.debug("Reading value: {} : {}", connectionHandle, descriptorHandle);
         BlueGigaAttributeValueEvent blueGigaAttributeValueEvent =
                 bgHandler.readCharacteristic(connectionHandle, descriptorHandle);
         return BluegigaUtils.fromInts(blueGigaAttributeValueEvent.getValue());
@@ -58,19 +59,27 @@ class BluegigaDescriptor implements Descriptor {
 
     @Override
     public boolean writeValue(byte[] bytes) {
-        logger.debug("Writing value: {}", url);
+        logger.debug("Writing value: {} : {}", connectionHandle, descriptorHandle);
         int[] data = BluegigaUtils.fromBytes(bytes);
         BlueGigaProcedureCompletedEvent event = bgHandler.writeCharacteristic(connectionHandle, descriptorHandle, data);
         if (event.getResult() != BgApiResponse.SUCCESS) {
-            logger.warn("Write operation failed for {} descriptor. Response: {}.", url, event.getResult());
+            logger.warn("Write operation failed for {}/{} descriptor. Response: {}.",
+                    connectionHandle, descriptorHandle, event.getResult());
             return false;
         }
         return true;
     }
 
-    @Override
-    public URL getURL() {
-        return url;
+    int getConnectionHandle() {
+        return connectionHandle;
+    }
+
+    int getDescriptorHandle() {
+        return descriptorHandle;
+    }
+
+    UUID getUuid() {
+        return uuid;
     }
 
 }
