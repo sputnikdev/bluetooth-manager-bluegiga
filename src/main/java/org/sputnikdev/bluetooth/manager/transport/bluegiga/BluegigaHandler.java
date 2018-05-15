@@ -106,7 +106,7 @@ class BluegigaHandler implements BlueGigaEventListener {
     private static final int ACTIVE_SCAN_INTERVAL = 0x4000; // min 0x4, default 0x4B, max 0x4000
     private static final int ACTIVE_SCAN_WINDOW = 0x4000; // min 0x4, default 0x32, max 0x4000
     private static final int CONNECTION_INTERVAL_MIN = 6;
-    private static final int CONNECTION_INTERVAL_MAX = 3200;
+    private static final int CONNECTION_INTERVAL_MAX = 3200; // min 6, 3200 max
     private static final int CONNECTION_LATENCY = 0;
     private static final int CONNECTION_TIMEOUT = 3200;
 
