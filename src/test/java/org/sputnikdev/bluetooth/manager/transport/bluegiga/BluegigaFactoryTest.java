@@ -57,8 +57,8 @@ public class BluegigaFactoryTest {
     private static final String ADAPTER_PORT_NAME_1 = "/dev/tty.usbmodem1";
     private static final String ADAPTER_PORT_NAME_2 = "/dev/tty.usbmodem2";
 
-    private static final URL ADAPTER_URL_1 = new URL("bluegiga://12:34:56:78:90:11");
-    private static final URL ADAPTER_URL_2 = new URL("bluegiga://11:22:33:44:55:66");
+    private static final URL ADAPTER_URL_1 = new URL("bluegiga:/12:34:56:78:90:11");
+    private static final URL ADAPTER_URL_2 = new URL("bluegiga:/11:22:33:44:55:66");
     private static final URL ADAPTER_1_DEVICE_1_URL = ADAPTER_URL_1.copyWithDevice("11:11:11:11:11:11");
     private static final URL ADAPTER_1_DEVICE_2_URL = ADAPTER_URL_1.copyWithDevice("22:22:22:22:22:22");
     private static final URL ADAPTER_2_DEVICE_1_URL = ADAPTER_URL_2.copyWithDevice("33:33:33:33:33:33");
